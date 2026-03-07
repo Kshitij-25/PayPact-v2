@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "531387933797",
+    "project_id": "paypact-fec8e",
+    "storage_bucket": "paypact-fec8e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:531387933797:android:3285b4e6fc0aafce87d28c",
+        "android_client_info": {
+          "package_name": "com.example.paypact"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "531387933797-gi2neo7h2rtasuk16d2r1rq2m8g8ad85.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjwfmOcYqJeu6gTNDA5COJkfqgXFawIGc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "531387933797-gi2neo7h2rtasuk16d2r1rq2m8g8ad85.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "531387933797-6r3upag01ihg89jokos6601s5mlkcg6u.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kshitijcodecraft.paypact"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:531387933797:android:f0f579e3d487b35087d28c",
+        "android_client_info": {
+          "package_name": "com.kshitijcodecraft.paypact"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "531387933797-gi2neo7h2rtasuk16d2r1rq2m8g8ad85.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjwfmOcYqJeu6gTNDA5COJkfqgXFawIGc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "531387933797-gi2neo7h2rtasuk16d2r1rq2m8g8ad85.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "531387933797-6r3upag01ihg89jokos6601s5mlkcg6u.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kshitijcodecraft.paypact"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
