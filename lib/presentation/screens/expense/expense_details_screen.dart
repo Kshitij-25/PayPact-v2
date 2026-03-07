@@ -37,7 +37,8 @@ class ExpenseDetailScreen extends StatelessWidget {
         title: const Text('Expense Details'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_outline, color: PaypactColors.danger),
+            icon: Icon(Icons.delete_outline,
+                color: Theme.of(context).colorScheme.error),
             onPressed: () {
               context
                   .read<ExpenseBloc>()
@@ -50,7 +51,8 @@ class ExpenseDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _buildHeader(expense.title, expense.amount, expense.currency),
+          _buildHeader(
+              context, expense.title, expense.amount, expense.currency),
           const SizedBox(height: 24),
           _buildInfoRow('Date',
               DateFormat('MMM d, yyyy · h:mm a').format(expense.createdAt)),
@@ -64,6 +66,7 @@ class ExpenseDetailScreen extends StatelessWidget {
           const SizedBox(height: 12),
           ...expense.paidBy.entries.map(
             (e) => _buildSplitRow(
+              context,
               memberName(e.key),
               expense.currency,
               e.value,
@@ -76,6 +79,7 @@ class ExpenseDetailScreen extends StatelessWidget {
           const SizedBox(height: 12),
           ...expense.splits.map(
             (s) => _buildSplitRow(
+              context,
               memberName(s.userId),
               expense.currency,
               s.amount,
@@ -87,12 +91,16 @@ class ExpenseDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(String title, double amount, String currency) {
+  Widget _buildHeader(
+      BuildContext context, String title, double amount, String currency) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [PaypactColors.primary, PaypactColors.primaryLight],
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary,
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.4)
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -142,7 +150,8 @@ class ExpenseDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSplitRow(String name, String currency, double amount,
+  Widget _buildSplitRow(
+      BuildContext context, String name, String currency, double amount,
       {required bool isPositive}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -150,11 +159,13 @@ class ExpenseDetailScreen extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 18,
-            backgroundColor: PaypactColors.primaryLight.withOpacity(0.15),
+            backgroundColor:
+                Theme.of(context).colorScheme.primary.withOpacity(0.15),
             child: Text(
               name.substring(0, 1).toUpperCase(),
-              style: const TextStyle(
-                  color: PaypactColors.primary, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(width: 12),
@@ -165,7 +176,7 @@ class ExpenseDetailScreen extends StatelessWidget {
               fontWeight: FontWeight.w600,
               color: isPositive
                   ? PaypactColors.secondary
-                  : PaypactColors.textPrimary,
+                  : Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ],

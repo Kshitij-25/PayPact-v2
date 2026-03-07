@@ -51,7 +51,7 @@ class GroupCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _buildBalanceBadge(balance, group.currency),
+              _buildBalanceBadge(context, balance, group.currency),
             ],
           ),
         ),
@@ -80,7 +80,8 @@ class GroupCard extends StatelessWidget {
     );
   }
 
-  Widget _buildBalanceBadge(double balance, String currency) {
+  Widget _buildBalanceBadge(
+      BuildContext context, double balance, String currency) {
     if (balance == 0) {
       return const Chip(
         label: Text('Settled',
@@ -103,7 +104,9 @@ class GroupCard extends StatelessWidget {
           style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 15,
-            color: isOwed ? PaypactColors.secondary : PaypactColors.danger,
+            color: isOwed
+                ? PaypactColors.secondary
+                : Theme.of(context).colorScheme.error,
           ),
         ),
       ],

@@ -63,19 +63,20 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'edit', child: Text('Edit Group')),
               const PopupMenuItem(value: 'settle', child: Text('Settle All')),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete',
                 child: Text('Delete Group',
-                    style: TextStyle(color: PaypactColors.danger)),
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
               ),
             ],
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          labelColor: PaypactColors.primary,
+          labelColor: Theme.of(context).colorScheme.primary,
           unselectedLabelColor: PaypactColors.textSecondary,
-          indicatorColor: PaypactColors.primary,
+          indicatorColor: Theme.of(context).colorScheme.primary,
           tabs: const [
             Tab(text: 'Expenses'),
             Tab(text: 'Balances'),
@@ -95,7 +96,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
         onPressed: () => context.push('/group/${widget.groupId}/expense/add'),
         icon: const Icon(Icons.add),
         label: const Text('Add Expense'),
-        backgroundColor: PaypactColors.primary,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
       ),
     );
@@ -313,13 +314,13 @@ class _BalancesTab extends StatelessWidget {
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: m.isInDebt
-                      ? PaypactColors.danger.withOpacity(0.1)
+                      ? Theme.of(context).colorScheme.error.withOpacity(0.1)
                       : PaypactColors.secondary.withOpacity(0.1),
                   child: Text(
                     m.displayName.substring(0, 1).toUpperCase(),
                     style: TextStyle(
                       color: m.isInDebt
-                          ? PaypactColors.danger
+                          ? Theme.of(context).colorScheme.error
                           : PaypactColors.secondary,
                       fontWeight: FontWeight.w600,
                     ),
@@ -338,7 +339,7 @@ class _BalancesTab extends StatelessWidget {
                         ? PaypactColors.textSecondary
                         : m.isOwed
                             ? PaypactColors.secondary
-                            : PaypactColors.danger,
+                            : Theme.of(context).colorScheme.error,
                   ),
                 ),
                 trailing: Text(
@@ -350,7 +351,7 @@ class _BalancesTab extends StatelessWidget {
                         ? PaypactColors.textSecondary
                         : m.isOwed
                             ? PaypactColors.secondary
-                            : PaypactColors.danger,
+                            : Theme.of(context).colorScheme.error,
                   ),
                 ),
               ),
@@ -385,12 +386,12 @@ class _SettleUpTab extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text(
+            Text(
               'Simplified debts',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 16,
-                color: PaypactColors.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 12),

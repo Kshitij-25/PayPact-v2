@@ -26,18 +26,19 @@ class EmptyState extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: PaypactColors.primary.withOpacity(0.08),
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 40, color: PaypactColors.primary),
+              child: Icon(icon,
+                  size: 40, color: Theme.of(context).colorScheme.primary),
             ),
             const SizedBox(height: 20),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: PaypactColors.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 8),

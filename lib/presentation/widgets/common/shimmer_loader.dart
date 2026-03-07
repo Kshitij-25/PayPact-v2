@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:paypact/core/theme/app_theme.dart';
 import 'package:shimmer/shimmer.dart';
 
 class ShimmerLoader extends StatelessWidget {
@@ -9,7 +8,7 @@ class ShimmerLoader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
-      baseColor: PaypactColors.divider,
+      baseColor: Theme.of(context).colorScheme.outline,
       highlightColor: Colors.white,
       child: ListView.separated(
         padding: const EdgeInsets.all(16),

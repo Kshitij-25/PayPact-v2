@@ -20,7 +20,10 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 44,
-                  backgroundColor: PaypactColors.primaryLight,
+                  backgroundColor: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.4),
                   backgroundImage: user?.photoUrl != null
                       ? NetworkImage(user!.photoUrl!)
                       : null,
@@ -52,30 +55,35 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           _buildTile(
+            context,
             icon: Icons.notifications_outlined,
             title: 'Notifications',
             onTap: () {},
           ),
           _buildTile(
+            context,
             icon: Icons.palette_outlined,
             title: 'Appearance',
             onTap: () {},
           ),
           _buildTile(
+            context,
             icon: Icons.language_outlined,
             title: 'Currency & Language',
             onTap: () {},
           ),
           _buildTile(
+            context,
             icon: Icons.privacy_tip_outlined,
             title: 'Privacy Policy',
             onTap: () {},
           ),
           const Divider(height: 32),
           _buildTile(
+            context,
             icon: Icons.logout,
             title: 'Sign Out',
-            color: PaypactColors.danger,
+            color: Theme.of(context).colorScheme.error,
             onTap: () => context.read<AuthBloc>().add(AuthSignOutRequested()),
           ),
         ],
@@ -83,18 +91,20 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTile({
+  Widget _buildTile(
+    BuildContext context, {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
     Color? color,
   }) {
     return ListTile(
-      leading: Icon(icon, color: color ?? PaypactColors.textPrimary),
+      leading:
+          Icon(icon, color: color ?? Theme.of(context).colorScheme.onSurface),
       title: Text(
         title,
         style: TextStyle(
-          color: color ?? PaypactColors.textPrimary,
+          color: color ?? Theme.of(context).colorScheme.onSurface,
           fontWeight: FontWeight.w500,
         ),
       ),

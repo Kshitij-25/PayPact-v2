@@ -75,7 +75,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: BlocBuilder<AuthBloc, AuthState>(
                   builder: (_, state) => CircleAvatar(
                     radius: 18,
-                    backgroundColor: PaypactColors.primaryLight,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.4),
                     backgroundImage: state.user?.photoUrl != null
                         ? NetworkImage(state.user!.photoUrl!)
                         : null,
@@ -108,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () => context.push('/group/create'),
                 icon: const Icon(Icons.add),
                 label: const Text('New Group'),
-                backgroundColor: PaypactColors.primary,
+                backgroundColor: Theme.of(context).colorScheme.primary,
                 foregroundColor: Colors.white,
               )
             : null,
@@ -226,13 +229,13 @@ class _ActivityTab extends StatelessWidget {
                       '';
               return _ActivityTile(
                 emoji: _categoryEmoji(e.category),
-                emojiColor: PaypactColors.primary,
+                emojiColor: Theme.of(context).colorScheme.primary,
                 title: e.title,
                 subtitle: groupName.isNotEmpty
                     ? '$groupName · ${DateFormat('MMM d').format(e.createdAt)}'
                     : DateFormat('MMM d').format(e.createdAt),
                 amount: '${e.currency} ${e.amount.toStringAsFixed(2)}',
-                amountColor: PaypactColors.textPrimary,
+                amountColor: Theme.of(context).colorScheme.onSurface,
               );
             } else {
               final s = (item as _SettlementActivityItem).settlement;

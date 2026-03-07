@@ -37,8 +37,9 @@ class DebtCard extends StatelessWidget {
                 children: [
                   RichText(
                     text: TextSpan(
-                      style: const TextStyle(
-                          fontSize: 14, color: PaypactColors.textPrimary),
+                      style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurface),
                       children: [
                         TextSpan(
                           text: isMyDebt ? 'You' : _name(debt.debtorId),
@@ -57,10 +58,10 @@ class DebtCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '${debt.currency} ${debt.amount.toStringAsFixed(2)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: PaypactColors.danger,
+                      color: Theme.of(context).colorScheme.error,
                     ),
                   ),
                 ],

@@ -81,18 +81,19 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 return ChoiceChip(
                   label: Text(_categoryLabel(cat)),
                   selected: isSelected,
-                  selectedColor: PaypactColors.primary.withOpacity(0.15),
+                  selectedColor:
+                      Theme.of(context).colorScheme.primary.withOpacity(0.15),
                   labelStyle: TextStyle(
                     color: isSelected
-                        ? PaypactColors.primary
+                        ? Theme.of(context).colorScheme.primary
                         : PaypactColors.textSecondary,
                     fontWeight:
                         isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
                   side: BorderSide(
                     color: isSelected
-                        ? PaypactColors.primary
-                        : PaypactColors.divider,
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.outline,
                   ),
                   onSelected: (_) => setState(() => _selectedCategory = cat),
                 );
@@ -140,10 +141,10 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontWeight: FontWeight.w600,
         fontSize: 14,
-        color: PaypactColors.textPrimary,
+        color: Theme.of(context).colorScheme.onSurface,
       ),
     );
   }

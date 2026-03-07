@@ -16,7 +16,7 @@ class SignInScreen extends StatelessWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.errorMessage ?? 'Sign in failed'),
-                backgroundColor: PaypactColors.danger,
+                backgroundColor: Theme.of(context).colorScheme.error,
               ),
             );
           }
@@ -28,7 +28,7 @@ class SignInScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Spacer(flex: 2),
-                _buildLogo(),
+                _buildLogo(context),
                 const SizedBox(height: 16),
                 _buildTagline(),
                 const Spacer(flex: 3),
@@ -44,15 +44,18 @@ class SignInScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildLogo() {
+  Widget _buildLogo(BuildContext context) {
     return Column(
       children: [
         Container(
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [PaypactColors.primary, PaypactColors.primaryLight],
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.4)
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -62,12 +65,12 @@ class SignInScreen extends StatelessWidget {
               color: Colors.white, size: 40),
         ),
         const SizedBox(height: 20),
-        const Text(
+        Text(
           'Paypact',
           style: TextStyle(
             fontSize: 36,
             fontWeight: FontWeight.w700,
-            color: PaypactColors.textPrimary,
+            color: Theme.of(context).colorScheme.onSurface,
             letterSpacing: -1,
           ),
         ),
@@ -106,14 +109,15 @@ class SignInScreen extends StatelessWidget {
                 : Brand(Brands.google),
             label: Text(
               state.isLoading ? 'Signing in...' : 'Continue with Google',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
-                color: PaypactColors.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: PaypactColors.divider, width: 1.5),
+              side: BorderSide(
+                  color: Theme.of(context).colorScheme.outline, width: 1.5),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

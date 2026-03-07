@@ -30,7 +30,7 @@ class ExpenseListItem extends StatelessWidget {
         children: [
           SlidableAction(
             onPressed: (_) => onDelete(),
-            backgroundColor: PaypactColors.danger,
+            backgroundColor: Theme.of(context).colorScheme.error,
             foregroundColor: Colors.white,
             icon: Icons.delete_outline,
             label: 'Delete',
@@ -46,7 +46,7 @@ class ExpenseListItem extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             child: Row(
               children: [
-                _buildIcon(),
+                _buildIcon(context),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -88,7 +88,7 @@ class ExpenseListItem extends StatelessWidget {
                             ? PaypactColors.textSecondary
                             : isLent
                                 ? PaypactColors.secondary
-                                : PaypactColors.danger,
+                                : Theme.of(context).colorScheme.error,
                       ),
                     ),
                   ],
@@ -101,12 +101,12 @@ class ExpenseListItem extends StatelessWidget {
     );
   }
 
-  Widget _buildIcon() {
+  Widget _buildIcon(BuildContext context) {
     return Container(
       width: 42,
       height: 42,
       decoration: BoxDecoration(
-        color: PaypactColors.primary.withOpacity(0.1),
+        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Center(

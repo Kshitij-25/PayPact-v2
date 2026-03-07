@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:paypact/core/theme/app_theme.dart';
 import 'package:paypact/domain/entities/expense_entity.dart';
 import 'package:paypact/domain/use_cases/create_expense_use_case.dart';
 import 'package:paypact/presentation/bloc/auth_bloc/auth_bloc.dart';
@@ -174,7 +173,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 child: ChoiceChip(
                   label: Text(_categoryEmoji(cat)),
                   selected: isSelected,
-                  selectedColor: PaypactColors.primary.withOpacity(0.15),
+                  selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
                   onSelected: (_) => setState(() => _category = cat),
                 ),
               );
@@ -233,7 +232,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           ...(members).map((m) => CheckboxListTile(
                 value: _selectedMembers.contains(m.userId),
                 title: Text(m.displayName as String),
-                activeColor: PaypactColors.primary,
+                activeColor: Theme.of(context).colorScheme.primary,
                 contentPadding: EdgeInsets.zero,
                 onChanged: (v) {
                   setState(() {

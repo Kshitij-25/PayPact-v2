@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:paypact/core/theme/app_theme.dart';
 
 class BalanceSummaryCard extends StatelessWidget {
   const BalanceSummaryCard({
@@ -16,8 +15,11 @@ class BalanceSummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [PaypactColors.primary, PaypactColors.primaryDark],
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary,
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.8)
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
