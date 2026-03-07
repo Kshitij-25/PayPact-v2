@@ -20,7 +20,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   })  : _watchAuthState = watchAuthState,
         _signInWithGoogle = signInWithGoogle,
         _signOut = signOut,
-        _getCurrentUser = getCurrentUser,
+        // _getCurrentUser = getCurrentUser,
         super(const AuthState()) {
     on<AuthStarted>(_onAuthStarted);
     on<AuthGoogleSignInRequested>(_onGoogleSignIn);
@@ -31,7 +31,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final WatchAuthStateUseCase _watchAuthState;
   final SignInWithGoogleUseCase _signInWithGoogle;
   final SignOutUseCase _signOut;
-  final GetCurrentUserUseCase _getCurrentUser;
+  // final GetCurrentUserUseCase _getCurrentUser;
   StreamSubscription<UserEntity?>? _authSub;
 
   void _onAuthStarted(AuthStarted event, Emitter<AuthState> emit) {

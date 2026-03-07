@@ -178,7 +178,8 @@ class AppTheme {
             backgroundColor: Colors.white,
             foregroundColor: PaypactColors.textSecondary,
             selectedForegroundColor: PaypactColors.primary,
-            selectedBackgroundColor: PaypactColors.primary.withOpacity(0.1),
+            selectedBackgroundColor:
+                PaypactColors.primary.withValues(alpha: 0.1),
             side: const BorderSide(color: PaypactColors.divider),
             textStyle: const TextStyle(fontFamily: 'Inter', fontSize: 13),
           ),
@@ -394,7 +395,7 @@ class AppTheme {
             foregroundColor: PaypactColors.darkTextSecondary,
             selectedForegroundColor: PaypactColors.primaryLight,
             selectedBackgroundColor:
-                PaypactColors.primaryLight.withOpacity(0.15),
+                PaypactColors.primaryLight.withValues(alpha: 0.15),
             side: const BorderSide(color: PaypactColors.darkDivider),
             textStyle: const TextStyle(fontFamily: 'Inter', fontSize: 13),
           ),

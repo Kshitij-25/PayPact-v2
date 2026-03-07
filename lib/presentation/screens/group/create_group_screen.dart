@@ -81,8 +81,10 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 return ChoiceChip(
                   label: Text(_categoryLabel(cat)),
                   selected: isSelected,
-                  selectedColor:
-                      Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                  selectedColor: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.15),
                   labelStyle: TextStyle(
                     color: isSelected
                         ? Theme.of(context).colorScheme.primary

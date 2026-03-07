@@ -302,7 +302,7 @@ class _ActivityTile extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: emojiColor.withOpacity(0.1),
+              color: emojiColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
@@ -324,7 +324,8 @@ class _ActivityTile extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: PaypactColors.secondary.withOpacity(0.12),
+                          color:
+                              PaypactColors.secondary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(

@@ -173,7 +173,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 child: ChoiceChip(
                   label: Text(_categoryEmoji(cat)),
                   selected: isSelected,
-                  selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                  selectedColor: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.15),
                   onSelected: (_) => setState(() => _category = cat),
                 ),
               );

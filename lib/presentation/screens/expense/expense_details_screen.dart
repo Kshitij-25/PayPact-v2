@@ -160,7 +160,7 @@ class ExpenseDetailScreen extends StatelessWidget {
           CircleAvatar(
             radius: 18,
             backgroundColor:
-                Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
             child: Text(
               name.substring(0, 1).toUpperCase(),
               style: TextStyle(

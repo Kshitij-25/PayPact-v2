@@ -106,7 +106,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
     context.read<GroupBloc>().add(GroupInviteLinkRequested(widget.groupId));
     final link = context.read<GroupBloc>().state.inviteLink;
     if (link != null) {
-      Share.share('Join my group on Paypact: $link');
+      SharePlus.instance
+          .share(ShareParams(text: 'Join my group on Paypact: $link'));
     }
   }
 }
@@ -224,7 +225,7 @@ class _SettlementListItem extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: PaypactColors.secondary.withOpacity(0.12),
+                color: PaypactColors.secondary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Center(
@@ -254,7 +255,8 @@ class _SettlementListItem extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color: PaypactColors.secondary.withOpacity(0.12),
+                          color:
+                              PaypactColors.secondary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
@@ -314,8 +316,11 @@ class _BalancesTab extends StatelessWidget {
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: m.isInDebt
-                      ? Theme.of(context).colorScheme.error.withOpacity(0.1)
-                      : PaypactColors.secondary.withOpacity(0.1),
+                      ? Theme.of(context)
+                          .colorScheme
+                          .error
+                          .withValues(alpha: 0.1)
+                      : PaypactColors.secondary.withValues(alpha: 0.1),
                   child: Text(
                     m.displayName.substring(0, 1).toUpperCase(),
                     style: TextStyle(
