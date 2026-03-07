@@ -25,7 +25,7 @@ abstract class GroupRepository {
   Future<Either<Failure, Unit>> deleteGroup(String groupId);
 
   Future<Either<Failure, GroupEntity>> joinGroupByInviteCode(
-      String inviteCode, UserEntity user);
+      String inviteCode, UserEntity userId);
 
   Future<Either<Failure, String>> generateInviteLink(String groupId);
 
@@ -38,4 +38,7 @@ abstract class GroupRepository {
     String userId,
     MemberRole role,
   );
+
+  /// Search for a registered user by exact email address.
+  Future<Either<Failure, UserEntity?>> searchUserByEmail(String email);
 }

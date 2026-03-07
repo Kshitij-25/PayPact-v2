@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:paypact/core/theme/app_theme.dart';
@@ -25,7 +26,7 @@ class ProfileScreen extends StatelessWidget {
                       .primary
                       .withValues(alpha: 0.4),
                   backgroundImage: user?.photoUrl != null
-                      ? NetworkImage(user!.photoUrl!)
+                      ? CachedNetworkImageProvider(user!.photoUrl!)
                       : null,
                   child: user?.photoUrl == null
                       ? Text(

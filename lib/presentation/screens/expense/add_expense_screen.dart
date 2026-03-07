@@ -92,30 +92,32 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Add Expense')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            _buildTitleField(),
-            const SizedBox(height: 16),
-            _buildAmountField(currency),
-            const SizedBox(height: 16),
-            _buildDescriptionField(),
-            const SizedBox(height: 24),
-            _buildCategorySelector(),
-            const SizedBox(height: 24),
-            _buildPaidBySelector(group?.members ?? []),
-            const SizedBox(height: 24),
-            _buildSplitTypeSelector(),
-            const SizedBox(height: 24),
-            _buildMemberSelector(group?.members ?? []),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: _submit,
-              child: const Text('Add Expense'),
-            ),
-          ],
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              _buildTitleField(),
+              const SizedBox(height: 16),
+              _buildAmountField(currency),
+              const SizedBox(height: 16),
+              _buildDescriptionField(),
+              const SizedBox(height: 24),
+              _buildCategorySelector(),
+              const SizedBox(height: 24),
+              _buildPaidBySelector(group?.members ?? []),
+              const SizedBox(height: 24),
+              _buildSplitTypeSelector(),
+              const SizedBox(height: 24),
+              _buildMemberSelector(group?.members ?? []),
+              const SizedBox(height: 40),
+              ElevatedButton(
+                onPressed: _submit,
+                child: const Text('Add Expense'),
+              ),
+            ],
+          ),
         ),
       ),
     );

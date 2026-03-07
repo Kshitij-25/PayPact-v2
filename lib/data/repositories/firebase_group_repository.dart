@@ -3,6 +3,7 @@ import 'package:dartz/dartz.dart';
 import 'package:paypact/core/failures/faliures.dart';
 import 'package:paypact/data/models/group_model.dart';
 import 'package:paypact/data/models/member_model.dart';
+import 'package:paypact/data/models/user_model.dart';
 import 'package:paypact/domain/entities/group_entity.dart';
 import 'package:paypact/domain/entities/member_entity.dart';
 import 'package:paypact/domain/entities/user_entity.dart';
@@ -127,34 +128,13 @@ class FirebaseGroupRepository implements GroupRepository {
     try {
       final snap =
           await _col.where('inviteCode', isEqualTo: inviteCode).limit(1).get();
-
       if (snap.docs.isEmpty) {
         return const Left(NotFoundFailure('Invalid invite code'));
       }
-
       final doc = snap.docs.first;
       final group = GroupModel.fromFirestore(doc.data(), doc.id).toEntity();
-
-      // Already a member
-      if (group.isMember(user.id)) {
-        return const Left(ValidationFailure('Already a member'));
-      }
-
-      // Create member entity
-      final member = MemberEntity(
-        userId: user.id,
-        // include other fields if your entity requires them
-        joinedAt: DateTime.now(), displayName: user.displayName,
-        email: user.email,
-      );
-
-      // 🔹 Reuse addMember()
-      final result = await addMember(doc.id, member);
-
-      return result.fold(
-        (failure) => Left(failure),
-        (_) => Right(group),
-      );
+      if (group.isMember(user.id)) return Right(group);
+      return Left(const ValidationFailure('Already a member'));
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }
@@ -243,6 +223,22 @@ class FirebaseGroupRepository implements GroupRepository {
       // memberIds doesn't change on a role update
       await _col.doc(groupId).update({'members': updatedMembers});
       return const Right(unit);
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, UserEntity?>> searchUserByEmail(String email) async {
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: email.trim().toLowerCase())
+          .limit(1)
+          .get();
+      if (snap.docs.isEmpty) return const Right(null);
+      final doc = snap.docs.first;
+      return Right(UserModel.fromFirestore(doc.data(), doc.id).toEntity());
     } catch (e) {
       return Left(ServerFailure(e.toString()));
     }

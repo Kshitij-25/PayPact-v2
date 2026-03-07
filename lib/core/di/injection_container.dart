@@ -13,16 +13,20 @@ import 'package:paypact/domain/repositories/auth_repository.dart';
 import 'package:paypact/domain/repositories/expense_repository.dart';
 import 'package:paypact/domain/repositories/group_repository.dart';
 import 'package:paypact/domain/repositories/notification_repository.dart';
+import 'package:paypact/domain/use_cases/add_member_to_group_use_case.dart';
 import 'package:paypact/domain/use_cases/create_expense_use_case.dart';
 import 'package:paypact/domain/use_cases/create_group_use_case.dart';
 import 'package:paypact/domain/use_cases/delete_expense_use_case.dart';
+import 'package:paypact/domain/use_cases/delete_group_use_case.dart';
 import 'package:paypact/domain/use_cases/generate_invite_link_use_case.dart';
 import 'package:paypact/domain/use_cases/get_current_user_use_case.dart';
 import 'package:paypact/domain/use_cases/get_simplified_debts_use_case.dart';
 import 'package:paypact/domain/use_cases/join_group_use_case.dart';
 import 'package:paypact/domain/use_cases/record_settlement_use_case.dart';
+import 'package:paypact/domain/use_cases/search_user_by_email_use_case.dart';
 import 'package:paypact/domain/use_cases/sign_in_with_google_use_case.dart';
 import 'package:paypact/domain/use_cases/sign_out_use_case.dart';
+import 'package:paypact/domain/use_cases/update_group_use_case.dart';
 import 'package:paypact/domain/use_cases/watch_auth_state_use_case.dart';
 import 'package:paypact/domain/use_cases/watch_group_expenses_use_case.dart';
 import 'package:paypact/domain/use_cases/watch_group_settlements_use_case.dart';
@@ -88,6 +92,10 @@ Future<void> initializeDependencies() async {
   locator.registerLazySingleton(() => WatchUserGroupsUseCase(locator()));
   locator.registerLazySingleton(() => JoinGroupUseCase(locator()));
   locator.registerLazySingleton(() => GenerateInviteLinkUseCase(locator()));
+  locator.registerLazySingleton(() => SearchUserByEmailUseCase(locator()));
+  locator.registerLazySingleton(() => AddMemberToGroupUseCase(locator()));
+  locator.registerLazySingleton(() => UpdateGroupUseCase(locator()));
+  locator.registerLazySingleton(() => DeleteGroupUseCase(locator()));
 
   // ─── Expense Use Cases ────────────────────────────────────────────────────
   locator
@@ -117,6 +125,10 @@ Future<void> initializeDependencies() async {
       createGroup: locator(),
       joinGroup: locator(),
       generateInviteLink: locator(),
+      addMemberToGroup: locator(),
+      searchUserByEmail: locator(),
+      deleteGroup: locator(),
+      updateGroup: locator(),
     ),
   );
 

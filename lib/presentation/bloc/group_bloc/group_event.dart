@@ -23,6 +23,30 @@ class GroupInviteLinkRequested extends GroupEvent {
   final String groupId;
 }
 
+class GroupMemberSearchRequested extends GroupEvent {
+  GroupMemberSearchRequested({required this.email, required this.groupId});
+  final String email;
+  final String groupId;
+}
+
+class GroupMemberAddRequested extends GroupEvent {
+  GroupMemberAddRequested({required this.groupId, required this.user});
+  final String groupId;
+  final UserEntity user;
+}
+
+class GroupMemberSearchCleared extends GroupEvent {}
+
+class GroupUpdateRequested extends GroupEvent {
+  GroupUpdateRequested(this.group);
+  final GroupEntity group;
+}
+
+class GroupDeleteRequested extends GroupEvent {
+  GroupDeleteRequested(this.groupId);
+  final String groupId;
+}
+
 class _GroupListUpdated extends GroupEvent {
   _GroupListUpdated(this.groups);
   final List<GroupEntity> groups;
