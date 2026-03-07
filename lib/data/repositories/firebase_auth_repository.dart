@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dartz/dartz.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:paypact/core/failures/faliures.dart';
 import 'package:paypact/data/models/user_model.dart';
@@ -35,14 +36,26 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<Either<AuthFailure, UserEntity>> signInWithGoogle() async {
     try {
-      final googleUser = await _googleSignIn.authenticate();
-      final googleAuth = googleUser.authentication;
-      final credential = fb.GoogleAuthProvider.credential(
-        accessToken: googleAuth.idToken,
-        idToken: googleAuth.idToken,
-      );
-      final userCredential =
-          await _firebaseAuth.signInWithCredential(credential);
+      late fb.UserCredential userCredential;
+
+      if (kIsWeb) {
+        // Web login
+        final provider = fb.GoogleAuthProvider();
+        userCredential = await _firebaseAuth.signInWithPopup(provider);
+      } else {
+        // Android / iOS login
+        final googleUser = await _googleSignIn.authenticate();
+
+        final googleAuth = googleUser.authentication;
+
+        final credential = fb.GoogleAuthProvider.credential(
+          accessToken: googleAuth.idToken,
+          idToken: googleAuth.idToken,
+        );
+
+        userCredential = await _firebaseAuth.signInWithCredential(credential);
+      }
+
       final user = userCredential.user!;
       return _upsertUserDocument(user);
     } on fb.FirebaseAuthException catch (e) {

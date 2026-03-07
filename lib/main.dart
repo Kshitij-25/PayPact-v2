@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:paypact/core/navigation/app_router.dart';
 import 'package:paypact/core/services/deep_link_service.dart';
 import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/firebase_options.dart';
 import 'package:paypact/presentation/bloc/auth_bloc/auth_bloc.dart';
 import 'package:paypact/presentation/bloc/expense_bloc/expense_bloc.dart';
 import 'package:paypact/presentation/bloc/group_bloc/group_bloc.dart';
@@ -19,7 +20,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await initializeDependencies();
   runApp(const PaypactApp());

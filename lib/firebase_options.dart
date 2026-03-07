@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -63,7 +60,18 @@ class DefaultFirebaseOptions {
     messagingSenderId: '531387933797',
     projectId: 'paypact-fec8e',
     storageBucket: 'paypact-fec8e.firebasestorage.app',
-    iosClientId: '531387933797-fv558vapve1tpej0v86hiqbcm2sg9536.apps.googleusercontent.com',
+    iosClientId:
+        '531387933797-fv558vapve1tpej0v86hiqbcm2sg9536.apps.googleusercontent.com',
     iosBundleId: 'com.example.paypact',
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyB4fsgbSrFNR0JstFXvd-aK_vyX742FKOM',
+    appId: '1:531387933797:web:608c22793e00144387d28c',
+    messagingSenderId: '531387933797',
+    projectId: 'paypact-fec8e',
+    authDomain: 'paypact-fec8e.firebaseapp.com',
+    storageBucket: 'paypact-fec8e.firebasestorage.app',
+    measurementId: 'G-HZ4E0L5KT6',
   );
 }

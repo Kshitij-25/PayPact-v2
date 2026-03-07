@@ -68,6 +68,10 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>531387933797-fv558vapve1tpej0v86hiqbcm2sg9536.apps.googleusercontent.com</string>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+	<string>applinks:paypact.app</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<!-- Google Sign-In — keep this exactly as is -->
