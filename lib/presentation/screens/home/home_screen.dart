@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/core/utils/currency_formatter.dart';
 import 'package:paypact/domain/entities/expense_entity.dart';
 import 'package:paypact/domain/entities/settlement_entity.dart';
 import 'package:paypact/presentation/bloc/auth_bloc/auth_bloc.dart';
@@ -235,7 +236,7 @@ class _ActivityTab extends StatelessWidget {
                 subtitle: groupName.isNotEmpty
                     ? '$groupName · ${DateFormat('MMM d').format(e.createdAt)}'
                     : DateFormat('MMM d').format(e.createdAt),
-                amount: '${e.currency} ${e.amount.toStringAsFixed(2)}',
+                amount: CurrencyFormatter.format(e.amount, e.currency),
                 amountColor: Theme.of(context).colorScheme.onSurface,
               );
             } else {
@@ -250,7 +251,7 @@ class _ActivityTab extends StatelessWidget {
                 subtitle: groupName.isNotEmpty
                     ? '$groupName · ${DateFormat('MMM d').format(s.createdAt)}'
                     : DateFormat('MMM d').format(s.createdAt),
-                amount: '${s.currency} ${s.amount.toStringAsFixed(2)}',
+                amount: CurrencyFormatter.format(s.amount, s.currency),
                 amountColor: PaypactColors.secondary,
                 badge: 'Settled',
               );

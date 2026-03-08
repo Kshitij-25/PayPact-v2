@@ -47,6 +47,18 @@ class GroupDeleteRequested extends GroupEvent {
   final String groupId;
 }
 
+class GroupLeaveRequested extends GroupEvent {
+  GroupLeaveRequested({required this.groupId, required this.userId});
+  final String groupId;
+  final String userId;
+}
+
+class GroupKickMemberRequested extends GroupEvent {
+  GroupKickMemberRequested({required this.groupId, required this.userId});
+  final String groupId;
+  final String userId;
+}
+
 class _GroupListUpdated extends GroupEvent {
   _GroupListUpdated(this.groups);
   final List<GroupEntity> groups;

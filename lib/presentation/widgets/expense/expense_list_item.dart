@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/core/utils/currency_formatter.dart';
 import 'package:paypact/domain/entities/expense_entity.dart';
 
 class ExpenseListItem extends StatelessWidget {
@@ -70,7 +71,8 @@ class ExpenseListItem extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '${expense.currency} ${expense.amount.toStringAsFixed(2)}',
+                      CurrencyFormatter.format(
+                          expense.amount, expense.currency),
                       style: const TextStyle(
                           fontWeight: FontWeight.w600, fontSize: 15),
                     ),
@@ -79,8 +81,8 @@ class ExpenseListItem extends StatelessWidget {
                       isSettled
                           ? 'you paid'
                           : isLent
-                              ? '+${expense.currency} ${net.toStringAsFixed(2)}'
-                              : '-${expense.currency} ${net.abs().toStringAsFixed(2)}',
+                              ? '+${CurrencyFormatter.format(net, expense.currency)}'
+                              : '-${CurrencyFormatter.format(net.abs(), expense.currency)}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,

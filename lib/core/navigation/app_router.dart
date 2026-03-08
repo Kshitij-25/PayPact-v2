@@ -6,6 +6,7 @@ import 'package:paypact/presentation/screens/expense/add_expense_screen.dart';
 import 'package:paypact/presentation/screens/expense/expense_details_screen.dart';
 import 'package:paypact/presentation/screens/group/create_group_screen.dart';
 import 'package:paypact/presentation/screens/group/group_details_screen.dart';
+import 'package:paypact/presentation/screens/group/group_settings_screen.dart';
 import 'package:paypact/presentation/screens/home/home_screen.dart';
 import 'package:paypact/presentation/screens/profile/profile_screen.dart';
 
@@ -15,7 +16,8 @@ class AppRoutes {
   static const groupDetail = '/group/:groupId';
   static const createGroup = '/group/create';
   static const addExpense = '/group/:groupId/expense/add';
-  static const expenseDetail = '/expense/:expenseId';
+  static const groupSettings = '/group/:groupId/settings';
+
   static const profile = '/profile';
 }
 
@@ -36,9 +38,9 @@ class AppRouter {
       if (isAuth && isSignIn) return AppRoutes.home;
       return null;
     },
-    onException: (_, state, router) {
-      router.go(AppRoutes.home);
-    },
+    // GoRouter also receives the raw platform URI (paypact://invite/CODE).
+    // It can't match that scheme as a route, so we redirect all unknown
+    // paths to home instead of showing an error page.
     routes: [
       GoRoute(
         path: AppRoutes.signIn,
@@ -64,6 +66,12 @@ class AppRouter {
                   groupId: state.pathParameters['groupId']!,
                 ),
               ),
+              GoRoute(
+                path: 'settings',
+                builder: (_, state) => GroupSettingsScreen(
+                  groupId: state.pathParameters['groupId']!,
+                ),
+              ),
             ],
           ),
           GoRoute(
@@ -79,6 +87,9 @@ class AppRouter {
         ],
       ),
     ],
+    errorBuilder: (_, state) => Scaffold(
+      body: Center(child: Text('Page not found: ${state.error}')),
+    ),
   );
 }
 

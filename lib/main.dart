@@ -10,6 +10,7 @@ import 'package:paypact/presentation/bloc/auth_bloc/auth_bloc.dart';
 import 'package:paypact/presentation/bloc/expense_bloc/expense_bloc.dart';
 import 'package:paypact/presentation/bloc/group_bloc/group_bloc.dart';
 import 'package:paypact/presentation/bloc/notification_bloc/notification_bloc.dart';
+import 'package:paypact/presentation/bloc/settings_bloc/settings_bloc.dart';
 
 import 'core/di/injection_container.dart';
 
@@ -91,6 +92,7 @@ class _PaypactAppState extends State<PaypactApp> {
         BlocProvider.value(value: _authBloc),
         BlocProvider.value(value: _groupBloc),
         BlocProvider(create: (_) => locator<ExpenseBloc>()),
+        BlocProvider.value(value: locator<SettingsBloc>()),
         BlocProvider(
           create: (_) =>
               locator<NotificationBloc>()..add(NotificationInitRequested()),

@@ -23,6 +23,7 @@ import 'package:paypact/domain/use_cases/get_current_user_use_case.dart';
 import 'package:paypact/domain/use_cases/get_simplified_debts_use_case.dart';
 import 'package:paypact/domain/use_cases/join_group_use_case.dart';
 import 'package:paypact/domain/use_cases/record_settlement_use_case.dart';
+import 'package:paypact/domain/use_cases/remove_member_use_case.dart';
 import 'package:paypact/domain/use_cases/search_user_by_email_use_case.dart';
 import 'package:paypact/domain/use_cases/sign_in_with_google_use_case.dart';
 import 'package:paypact/domain/use_cases/sign_out_use_case.dart';
@@ -36,6 +37,7 @@ import 'package:paypact/presentation/bloc/auth_bloc/auth_bloc.dart';
 import 'package:paypact/presentation/bloc/expense_bloc/expense_bloc.dart';
 import 'package:paypact/presentation/bloc/group_bloc/group_bloc.dart';
 import 'package:paypact/presentation/bloc/notification_bloc/notification_bloc.dart';
+import 'package:paypact/presentation/bloc/settings_bloc/settings_bloc.dart';
 
 final locator = GetIt.instance;
 
@@ -96,6 +98,7 @@ Future<void> initializeDependencies() async {
   locator.registerLazySingleton(() => AddMemberToGroupUseCase(locator()));
   locator.registerLazySingleton(() => UpdateGroupUseCase(locator()));
   locator.registerLazySingleton(() => DeleteGroupUseCase(locator()));
+  locator.registerLazySingleton(() => RemoveMemberUseCase(locator()));
 
   // ─── Expense Use Cases ────────────────────────────────────────────────────
   locator
@@ -129,6 +132,7 @@ Future<void> initializeDependencies() async {
       searchUserByEmail: locator(),
       deleteGroup: locator(),
       updateGroup: locator(),
+      removeMember: locator(),
     ),
   );
 
@@ -146,4 +150,6 @@ Future<void> initializeDependencies() async {
 
   locator.registerFactory(
       () => NotificationBloc(notificationRepository: locator()));
+
+  locator.registerFactory(() => SettingsBloc());
 }

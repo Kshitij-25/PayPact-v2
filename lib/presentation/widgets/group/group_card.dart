@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/core/utils/currency_formatter.dart';
 import 'package:paypact/domain/entities/group_entity.dart';
 
 class GroupCard extends StatelessWidget {
@@ -42,7 +43,7 @@ class GroupCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${group.memberCount} members · ${group.currency} ${group.totalExpenses.toStringAsFixed(0)} total',
+                      '${group.memberCount} members · ${CurrencyFormatter.format(group.totalExpenses, group.currency)} total',
                       style: const TextStyle(
                         fontSize: 13,
                         color: PaypactColors.textSecondary,
@@ -100,7 +101,7 @@ class GroupCard extends StatelessWidget {
               const TextStyle(fontSize: 11, color: PaypactColors.textSecondary),
         ),
         Text(
-          '$currency ${balance.abs().toStringAsFixed(2)}',
+          CurrencyFormatter.format(balance.abs(), currency),
           style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 15,

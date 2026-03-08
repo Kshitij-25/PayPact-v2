@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/core/utils/currency_formatter.dart';
 import 'package:paypact/presentation/bloc/expense_bloc/expense_bloc.dart';
 import 'package:paypact/presentation/bloc/group_bloc/group_bloc.dart';
 
@@ -118,7 +119,7 @@ class ExpenseDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '$currency ${amount.toStringAsFixed(2)}',
+            CurrencyFormatter.format(amount, currency),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 32,
@@ -171,7 +172,7 @@ class ExpenseDetailScreen extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(child: Text(name)),
           Text(
-            '$currency ${amount.toStringAsFixed(2)}',
+            CurrencyFormatter.format(amount, currency),
             style: TextStyle(
               fontWeight: FontWeight.w600,
               color: isPositive

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/core/utils/currency_formatter.dart';
 import 'package:paypact/domain/entities/debt_entity.dart';
 import 'package:paypact/domain/entities/member_entity.dart';
 
@@ -57,7 +58,8 @@ class DebtCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${debt.currency} ${debt.amount.toStringAsFixed(2)}',
+                    // '${debt.currency} ${debt.amount.toStringAsFixed(2)}',
+                    CurrencyFormatter.format(debt.amount, debt.currency),
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,

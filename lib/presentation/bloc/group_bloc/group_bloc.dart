@@ -10,6 +10,7 @@ import 'package:paypact/domain/use_cases/create_group_use_case.dart';
 import 'package:paypact/domain/use_cases/delete_group_use_case.dart';
 import 'package:paypact/domain/use_cases/generate_invite_link_use_case.dart';
 import 'package:paypact/domain/use_cases/join_group_use_case.dart';
+import 'package:paypact/domain/use_cases/remove_member_use_case.dart';
 import 'package:paypact/domain/use_cases/search_user_by_email_use_case.dart';
 import 'package:paypact/domain/use_cases/update_group_use_case.dart';
 import 'package:paypact/domain/use_cases/watch_user_groups_use_case.dart';
@@ -27,6 +28,7 @@ class GroupBloc extends Bloc<GroupEvent, GroupState> {
     required AddMemberToGroupUseCase addMemberToGroup,
     required UpdateGroupUseCase updateGroup,
     required DeleteGroupUseCase deleteGroup,
+    required RemoveMemberUseCase removeMember,
   })  : _watchUserGroups = watchUserGroups,
         _createGroup = createGroup,
         _joinGroup = joinGroup,
@@ -35,6 +37,7 @@ class GroupBloc extends Bloc<GroupEvent, GroupState> {
         _addMemberToGroup = addMemberToGroup,
         _updateGroup = updateGroup,
         _deleteGroup = deleteGroup,
+        _removeMember = removeMember,
         super(const GroupState()) {
     on<GroupLoadRequested>(_onLoad);
     on<GroupCreateRequested>(_onCreate);
@@ -45,6 +48,8 @@ class GroupBloc extends Bloc<GroupEvent, GroupState> {
     on<GroupMemberSearchCleared>(_onMemberSearchCleared);
     on<GroupUpdateRequested>(_onUpdate);
     on<GroupDeleteRequested>(_onDelete);
+    on<GroupLeaveRequested>(_onLeave);
+    on<GroupKickMemberRequested>(_onKick);
     on<_GroupListUpdated>(_onListUpdated);
   }
 
@@ -56,14 +61,14 @@ class GroupBloc extends Bloc<GroupEvent, GroupState> {
   final AddMemberToGroupUseCase _addMemberToGroup;
   final UpdateGroupUseCase _updateGroup;
   final DeleteGroupUseCase _deleteGroup;
+  final RemoveMemberUseCase _removeMember;
   StreamSubscription<List<GroupEntity>>? _groupsSub;
 
   void _onLoad(GroupLoadRequested event, Emitter<GroupState> emit) {
     emit(state.copyWith(status: GroupStatus.loading));
     _groupsSub?.cancel();
-    _groupsSub = _watchUserGroups(event.userId).listen(
-      (groups) => add(_GroupListUpdated(groups)),
-    );
+    _groupsSub = _watchUserGroups(event.userId)
+        .listen((groups) => add(_GroupListUpdated(groups)));
   }
 
   void _onListUpdated(_GroupListUpdated event, Emitter<GroupState> emit) {
@@ -83,10 +88,8 @@ class GroupBloc extends Bloc<GroupEvent, GroupState> {
   Future<void> _onJoin(
       GroupJoinRequested event, Emitter<GroupState> emit) async {
     emit(state.copyWith(status: GroupStatus.loading));
-    final result = await _joinGroup(
-      inviteCode: event.inviteCode,
-      user: event.user,
-    );
+    final result =
+        await _joinGroup(inviteCode: event.inviteCode, user: event.user);
     result.fold(
       (f) => emit(
           state.copyWith(status: GroupStatus.failure, errorMessage: f.message)),
@@ -107,16 +110,14 @@ class GroupBloc extends Bloc<GroupEvent, GroupState> {
   Future<void> _onMemberSearch(
       GroupMemberSearchRequested event, Emitter<GroupState> emit) async {
     emit(state.copyWith(
-      memberSearchStatus: MemberSearchStatus.searching,
-      clearFoundUser: true,
-      memberSearchError: null,
-    ));
+        memberSearchStatus: MemberSearchStatus.searching,
+        clearFoundUser: true,
+        memberSearchError: null));
     final result = await _searchUserByEmail(event.email);
     result.fold(
       (f) => emit(state.copyWith(
-        memberSearchStatus: MemberSearchStatus.notFound,
-        memberSearchError: f.message,
-      )),
+          memberSearchStatus: MemberSearchStatus.notFound,
+          memberSearchError: f.message)),
       (user) {
         if (user == null) {
           emit(state.copyWith(memberSearchStatus: MemberSearchStatus.notFound));
@@ -124,10 +125,9 @@ class GroupBloc extends Bloc<GroupEvent, GroupState> {
         }
         final group =
             state.groups.where((g) => g.id == event.groupId).firstOrNull;
-        final alreadyMember =
-            group?.members.any((m) => m.userId == user.id) ?? false;
+        final already = group?.members.any((m) => m.userId == user.id) ?? false;
         emit(state.copyWith(
-          memberSearchStatus: alreadyMember
+          memberSearchStatus: already
               ? MemberSearchStatus.alreadyMember
               : MemberSearchStatus.found,
           foundUser: user,
@@ -151,23 +151,19 @@ class GroupBloc extends Bloc<GroupEvent, GroupState> {
         await _addMemberToGroup(groupId: event.groupId, member: member);
     result.fold(
       (f) => emit(state.copyWith(
-        memberSearchStatus: MemberSearchStatus.addFailure,
-        memberSearchError: f.message,
-      )),
+          memberSearchStatus: MemberSearchStatus.addFailure,
+          memberSearchError: f.message)),
       (_) => emit(state.copyWith(
-        memberSearchStatus: MemberSearchStatus.added,
-        clearFoundUser: true,
-      )),
+          memberSearchStatus: MemberSearchStatus.added, clearFoundUser: true)),
     );
   }
 
   void _onMemberSearchCleared(
       GroupMemberSearchCleared event, Emitter<GroupState> emit) {
     emit(state.copyWith(
-      memberSearchStatus: MemberSearchStatus.idle,
-      clearFoundUser: true,
-      memberSearchError: null,
-    ));
+        memberSearchStatus: MemberSearchStatus.idle,
+        clearFoundUser: true,
+        memberSearchError: null));
   }
 
   Future<void> _onUpdate(
@@ -188,6 +184,29 @@ class GroupBloc extends Bloc<GroupEvent, GroupState> {
       (f) => emit(
           state.copyWith(status: GroupStatus.failure, errorMessage: f.message)),
       (_) => emit(state.copyWith(status: GroupStatus.success)),
+    );
+  }
+
+  Future<void> _onLeave(
+      GroupLeaveRequested event, Emitter<GroupState> emit) async {
+    emit(state.copyWith(status: GroupStatus.loading));
+    final result =
+        await _removeMember(groupId: event.groupId, userId: event.userId);
+    result.fold(
+      (f) => emit(
+          state.copyWith(status: GroupStatus.failure, errorMessage: f.message)),
+      (_) => emit(state.copyWith(status: GroupStatus.success)),
+    );
+  }
+
+  Future<void> _onKick(
+      GroupKickMemberRequested event, Emitter<GroupState> emit) async {
+    final result =
+        await _removeMember(groupId: event.groupId, userId: event.userId);
+    result.fold(
+      (f) => emit(
+          state.copyWith(status: GroupStatus.failure, errorMessage: f.message)),
+      (_) => null, // stream will update the members list automatically
     );
   }
 
