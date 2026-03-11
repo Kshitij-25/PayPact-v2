@@ -22,8 +22,36 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<!-- Google Sign In -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.paypact.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.531387933797-fv558vapve1tpej0v86hiqbcm2sg9536</string>
+			</array>
+		</dict>
+
+		<!-- Paypact deep link -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.paypact.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>paypact</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>GIDClientID</key>
+	<string>531387933797-fv558vapve1tpej0v86hiqbcm2sg9536.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -66,36 +94,18 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>GIDClientID</key>
-	<string>531387933797-fv558vapve1tpej0v86hiqbcm2sg9536.apps.googleusercontent.com</string>
 	<key>com.apple.developer.associated-domains</key>
-	<array>
-	<string>applinks:paypact.app</string>
-	</array>
+    <array>
+        <string>applinks:paypact-fec8e.web.app</string>
+    </array>
 	<key>CFBundleURLTypes</key>
-	<array>
-		<!-- Google Sign-In — keep this exactly as is -->
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>com.briefsea.briefsea</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.531387933797-fv558vapve1tpej0v86hiqbcm2sg9536</string>
-			</array>
-		</dict>
-		<!-- Paypact deep links — paypact://invite/CODE -->
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>com.paypact.app</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>paypact</string>
-			</array>
-		</dict>
-	</array>
+    <array>
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>paypact</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

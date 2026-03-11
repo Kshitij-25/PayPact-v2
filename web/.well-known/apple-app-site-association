@@ -1,14 +1,17 @@
 {
-    "applinks": {
-        "details": [
-            {
-                "appIDs": [
-                    "TEAMID.com.paypact.app"
-                ],
-                "paths": [
-                    "/invite/*"
-                ]
-            }
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "9SXYKBU574.com.paypact.app"
+        ],
+        "components": [
+          {
+            "/": "/invite/*",
+            "comment": "Matches all Paypact group invite deep links"
+          }
         ]
-    }
+      }
+    ]
+  }
 }

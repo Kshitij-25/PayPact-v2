@@ -62,7 +62,7 @@ class DefaultFirebaseOptions {
     storageBucket: 'paypact-fec8e.firebasestorage.app',
     iosClientId:
         '531387933797-fv558vapve1tpej0v86hiqbcm2sg9536.apps.googleusercontent.com',
-    iosBundleId: 'com.example.paypact',
+    iosBundleId: 'com.paypact.app',
   );
 
   static const FirebaseOptions web = FirebaseOptions(

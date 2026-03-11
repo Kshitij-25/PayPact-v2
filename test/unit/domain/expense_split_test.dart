@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:paypact/core/services/expense_split_service.dart';
-import 'package:paypact/domain/entities/expense_entity.dart';
+import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 
 void main() {
   late ExpenseSplitService service;

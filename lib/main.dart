@@ -5,12 +5,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:paypact/core/navigation/app_router.dart';
 import 'package:paypact/core/services/deep_link_service.dart';
 import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:paypact/features/expense/presentation/bloc/expense_bloc.dart';
+import 'package:paypact/features/group/presentation/bloc/group_bloc.dart';
+import 'package:paypact/features/notification/presentation/bloc/notification_bloc.dart';
+import 'package:paypact/features/profile/presentation/bloc/settings_bloc.dart';
 import 'package:paypact/firebase_options.dart';
-import 'package:paypact/presentation/bloc/auth_bloc/auth_bloc.dart';
-import 'package:paypact/presentation/bloc/expense_bloc/expense_bloc.dart';
-import 'package:paypact/presentation/bloc/group_bloc/group_bloc.dart';
-import 'package:paypact/presentation/bloc/notification_bloc/notification_bloc.dart';
-import 'package:paypact/presentation/bloc/settings_bloc/settings_bloc.dart';
 
 import 'core/di/injection_container.dart';
 
@@ -98,13 +98,16 @@ class _PaypactAppState extends State<PaypactApp> {
               locator<NotificationBloc>()..add(NotificationInitRequested()),
         ),
       ],
-      child: MaterialApp.router(
-        title: 'Paypact',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.system,
-        routerConfig: _appRouter.router,
+      child: BlocBuilder<SettingsBloc, SettingsState>(
+        buildWhen: (p, c) => p.themeMode != c.themeMode,
+        builder: (_, settings) => MaterialApp.router(
+          title: 'Paypact',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: settings.themeMode,
+          routerConfig: _appRouter.router,
+        ),
       ),
     );
   }

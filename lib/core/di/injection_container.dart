@@ -5,39 +5,40 @@ import 'package:get_it/get_it.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:paypact/core/services/debt_simplification_service.dart';
 import 'package:paypact/core/services/expense_split_service.dart';
-import 'package:paypact/data/repositories/firebase_auth_repository.dart';
-import 'package:paypact/data/repositories/firebase_expense_repository.dart';
-import 'package:paypact/data/repositories/firebase_group_repository.dart';
-import 'package:paypact/data/repositories/firebase_notification_repository.dart';
-import 'package:paypact/domain/repositories/auth_repository.dart';
-import 'package:paypact/domain/repositories/expense_repository.dart';
-import 'package:paypact/domain/repositories/group_repository.dart';
-import 'package:paypact/domain/repositories/notification_repository.dart';
-import 'package:paypact/domain/use_cases/add_member_to_group_use_case.dart';
-import 'package:paypact/domain/use_cases/create_expense_use_case.dart';
-import 'package:paypact/domain/use_cases/create_group_use_case.dart';
-import 'package:paypact/domain/use_cases/delete_expense_use_case.dart';
-import 'package:paypact/domain/use_cases/delete_group_use_case.dart';
-import 'package:paypact/domain/use_cases/generate_invite_link_use_case.dart';
-import 'package:paypact/domain/use_cases/get_current_user_use_case.dart';
-import 'package:paypact/domain/use_cases/get_simplified_debts_use_case.dart';
-import 'package:paypact/domain/use_cases/join_group_use_case.dart';
-import 'package:paypact/domain/use_cases/record_settlement_use_case.dart';
-import 'package:paypact/domain/use_cases/remove_member_use_case.dart';
-import 'package:paypact/domain/use_cases/search_user_by_email_use_case.dart';
-import 'package:paypact/domain/use_cases/sign_in_with_google_use_case.dart';
-import 'package:paypact/domain/use_cases/sign_out_use_case.dart';
-import 'package:paypact/domain/use_cases/update_group_use_case.dart';
-import 'package:paypact/domain/use_cases/watch_auth_state_use_case.dart';
-import 'package:paypact/domain/use_cases/watch_group_expenses_use_case.dart';
-import 'package:paypact/domain/use_cases/watch_group_settlements_use_case.dart';
-import 'package:paypact/domain/use_cases/watch_user_activity_use_case.dart';
-import 'package:paypact/domain/use_cases/watch_user_groups_use_case.dart';
-import 'package:paypact/presentation/bloc/auth_bloc/auth_bloc.dart';
-import 'package:paypact/presentation/bloc/expense_bloc/expense_bloc.dart';
-import 'package:paypact/presentation/bloc/group_bloc/group_bloc.dart';
-import 'package:paypact/presentation/bloc/notification_bloc/notification_bloc.dart';
-import 'package:paypact/presentation/bloc/settings_bloc/settings_bloc.dart';
+import 'package:paypact/features/auth/data/repositories/firebase_auth_repository.dart';
+import 'package:paypact/features/auth/domain/repositories/auth_repository.dart';
+import 'package:paypact/features/auth/domain/use_cases/get_current_user_use_case.dart';
+import 'package:paypact/features/auth/domain/use_cases/sign_in_with_google_use_case.dart';
+import 'package:paypact/features/auth/domain/use_cases/sign_out_use_case.dart';
+import 'package:paypact/features/auth/domain/use_cases/watch_auth_state_use_case.dart';
+import 'package:paypact/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:paypact/features/expense/data/repositories/firebase_expense_repository.dart';
+import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/expense/domain/use_cases/create_expense_use_case.dart';
+import 'package:paypact/features/expense/domain/use_cases/delete_expense_use_case.dart';
+import 'package:paypact/features/expense/domain/use_cases/record_settlement_use_case.dart';
+import 'package:paypact/features/expense/domain/use_cases/update_expense_use_case.dart';
+import 'package:paypact/features/expense/presentation/bloc/expense_bloc.dart';
+import 'package:paypact/features/group/data/repositories/firebase_group_repository.dart';
+import 'package:paypact/features/group/domain/repositories/group_repository.dart';
+import 'package:paypact/features/group/domain/use_cases/add_member_to_group_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/create_group_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/delete_group_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/generate_invite_link_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/get_simplified_debts_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/join_group_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/remove_member_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/search_user_by_email_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/update_group_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/watch_group_expenses_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/watch_group_settlements_use_case.dart';
+import 'package:paypact/features/group/domain/use_cases/watch_user_groups_use_case.dart';
+import 'package:paypact/features/group/presentation/bloc/group_bloc.dart';
+import 'package:paypact/features/home/domain/use_cases/watch_user_activity_use_case.dart';
+import 'package:paypact/features/notification/data/repositories/firebase_notification_repository.dart';
+import 'package:paypact/features/notification/domain/repositories/notification_repository.dart';
+import 'package:paypact/features/notification/presentation/bloc/notification_bloc.dart';
+import 'package:paypact/features/profile/presentation/bloc/settings_bloc.dart';
 
 final locator = GetIt.instance;
 
@@ -108,6 +109,8 @@ Future<void> initializeDependencies() async {
   locator.registerLazySingleton(() => GetSimplifiedDebtsUseCase(locator()));
   locator.registerLazySingleton(() => WatchGroupSettlementsUseCase(locator()));
   locator.registerLazySingleton(() => WatchUserActivityUseCase(locator()));
+  locator
+      .registerLazySingleton(() => UpdateExpenseUseCase(locator(), locator()));
 
   // ─── Settlement Use Cases ─────────────────────────────────────────────────
   locator.registerLazySingleton(() => RecordSettlementUseCase(locator()));
@@ -145,6 +148,7 @@ Future<void> initializeDependencies() async {
       getSimplifiedDebts: locator(),
       recordSettlement: locator(),
       watchGroupSettlements: locator(),
+      updateExpense: locator(),
     ),
   );
 

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join Group – Paypact</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Design tokens pulled 1:1 from app_theme.dart ── */
+    :root {
+      --primary: #4F46E5;
+      /* Indigo 600  — PaypactColors.primary      */
+      --primary-light: #818CF8;
+      /* Indigo 400  — PaypactColors.primaryLight */
+      --primary-dark: #3730A3;
+      /* Indigo 800  — PaypactColors.primaryDark  */
+      --secondary: #10B981;
+      /* Emerald 500 — PaypactColors.secondary    */
+      --surface: #F9FAFB;
+      /* Gray 50     — PaypactColors.surface      */
+      --card-bg: #FFFFFF;
+      /* PaypactColors.cardBg                     */
+      --text-primary: #111827;
+      /* Gray 900    — PaypactColors.textPrimary  */
+      --text-secondary: #6B7280;
+      /* Gray 500    — PaypactColors.textSecondary*/
+      --divider: #E5E7EB;
+      /* Gray 200    — PaypactColors.divider      */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--surface);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    /* ── Top gradient strip matching the app's gradient headers ── */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 260px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      z-index: 0;
+    }
+
+    .card {
+      position: relative;
+      z-index: 1;
+      background: var(--card-bg);
+      border-radius: 16px;
+      border: 1px solid var(--divider);
+      padding: 36px 28px 32px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    /* ── Logo badge ── */
+    .logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 30px;
+      box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 28px;
+      line-height: 1.6;
+    }
+
+    /* ── Invite code pill ── */
+    .code-pill {
+      background: rgba(79, 70, 229, 0.06);
+      border: 1.5px solid rgba(79, 70, 229, 0.18);
+      border-radius: 40px;
+      padding: 12px 22px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      cursor: pointer;
+      transition: background 0.15s;
+      user-select: none;
+    }
+
+    .code-pill:hover {
+      background: rgba(79, 70, 229, 0.1);
+    }
+
+    .code-text {
+      font-family: 'Courier New', monospace;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: var(--primary);
+    }
+
+    .copy-icon {
+      font-size: 15px;
+      opacity: 0.55;
+    }
+
+    .copy-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--primary);
+      opacity: 0.7;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--divider);
+      margin: 0 0 20px;
+    }
+
+    /* ── Join button — matches ElevatedButton in app ── */
+    .join-btn {
+      display: block;
+      width: 100%;
+      padding: 14px 24px;
+      background: var(--primary);
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      margin-bottom: 16px;
+      transition: background 0.15s, box-shadow 0.15s;
+      letter-spacing: 0.1px;
+    }
+
+    .join-btn:hover {
+      background: var(--primary-dark);
+      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+    }
+
+    .join-btn:active {
+      background: var(--primary-dark);
+      box-shadow: none;
+    }
+
+    /* ── Hint text ── */
+    .hint {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .hint a {
+      color: var(--primary);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .hint a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text-primary);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.25s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="logo">💸</div>
+
+    <h1>You're invited!</h1>
+    <p class="subtitle">
+      Someone has invited you to join a group on Paypact —
+      the smart way to split expenses with friends.
+    </p>
+
+    <!-- Invite code — tap to copy -->
+    <div class="code-pill" onclick="copyCode()" title="Tap to copy">
+      <span class="code-text" id="codeDisplay">———</span>
+      <span class="copy-icon">📋</span>
+      <span class="copy-label">copy</span>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- CTA: opens Flutter web app at /join/CODE -->
+    <button class="join-btn" onclick="joinOnWeb()">
+      Join Group
+    </button>
+
+    <p class="hint">
+      You'll be asked to sign in if you don't have an account yet.
+    </p>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    const code = parts[parts.length - 1] || '';
+    const webUrl = 'https://paypact-fec8e.web.app/join/' + code;
+
+    if (code) {
+      document.getElementById('codeDisplay').textContent = code;
+    }
+
+    function joinOnWeb() {
+      if (!code) return;
+      window.location.href = webUrl;
+    }
+
+    function copyCode() {
+      if (!code) return;
+      navigator.clipboard.writeText(code)
+        .then(() => showToast('Invite code copied!'))
+        .catch(() => showToast(code));
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2200);
+    }
+  </script>
+</body>
+
+</html>

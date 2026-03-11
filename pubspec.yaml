@@ -58,6 +58,8 @@ dependencies:
   font_awesome_flutter: ^10.12.0
   icons_plus: ^5.0.0
   fl_chart: ^1.1.1
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.2.0
   
 
 dev_dependencies:
@@ -72,10 +74,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/images/
-    - assets/icons/
-    - assets/animations/
+  # assets:
+    # - assets/images/
+    # - assets/icons/
+    # - assets/animations/
   # fonts:
   #   - family: Inter
   #     fonts:

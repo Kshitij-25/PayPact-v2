@@ -1,5 +1,5 @@
-import 'package:paypact/domain/entities/expense_entity.dart';
-import 'package:paypact/domain/entities/expense_split_entity.dart';
+import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
+import 'package:paypact/features/expense/domain/entities/expense_split_entity.dart';
 
 /// Computes expense splits based on SplitType.
 /// Pure domain logic — zero dependencies.

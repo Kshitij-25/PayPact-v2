@@ -1,5 +1,5 @@
-import 'package:paypact/domain/entities/debt_entity.dart';
-import 'package:paypact/domain/entities/member_entity.dart';
+import 'package:paypact/features/group/domain/entities/debt_entity.dart';
+import 'package:paypact/features/group/domain/entities/member_entity.dart';
 
 /// Pure domain service — no Flutter/Firebase dependencies.
 /// Implements Greedy Debt Simplification using net-balance settling.
