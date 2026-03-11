@@ -57,7 +57,7 @@ class GroupSettingsScreen extends StatelessWidget {
                         _SettingsCard(children: [
                           _SettingsTile(
                             icon: Icons.edit_outlined,
-                            iconColor: PaypactColors.primary,
+                            iconColor: Theme.of(context).colorScheme.primary,
                             title: 'Edit Name & Category',
                             onTap: () => _showEditSheet(ctx, group),
                           ),
@@ -67,10 +67,12 @@ class GroupSettingsScreen extends StatelessWidget {
                             iconColor: PaypactColors.warning,
                             title: 'Default Currency',
                             trailing: Text(group.currency,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
-                                    color: PaypactColors.textSecondary)),
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant)),
                             onTap: () => _showCurrencySheet(ctx, group),
                           ),
                         ]),
@@ -83,14 +85,14 @@ class GroupSettingsScreen extends StatelessWidget {
                       _SettingsCard(children: [
                         _SettingsTile(
                           icon: Icons.person_add_outlined,
-                          iconColor: PaypactColors.secondary,
+                          iconColor: Theme.of(context).colorScheme.secondary,
                           title: 'Add Member by Email',
                           onTap: () => _showAddMemberSheet(ctx),
                         ),
                         _Divider(),
                         _SettingsTile(
                           icon: Icons.share_outlined,
-                          iconColor: PaypactColors.primary,
+                          iconColor: Theme.of(context).colorScheme.primary,
                           title: 'Share Invite Link',
                           onTap: () => _shareInviteLink(ctx),
                         ),
@@ -98,7 +100,7 @@ class GroupSettingsScreen extends StatelessWidget {
                           _Divider(),
                           _SettingsTile(
                             icon: Icons.qr_code_rounded,
-                            iconColor: PaypactColors.primary,
+                            iconColor: Theme.of(context).colorScheme.primary,
                             title: 'Show QR Code',
                             subtitle: 'Let someone scan to join instantly',
                             onTap: () {
@@ -118,7 +120,7 @@ class GroupSettingsScreen extends StatelessWidget {
                         _Divider(),
                         _SettingsTile(
                           icon: Icons.qr_code_scanner_outlined,
-                          iconColor: PaypactColors.secondary,
+                          iconColor: Theme.of(context).colorScheme.secondary,
                           title: 'Scan QR to Add',
                           subtitle: "Scan a member's invite QR code",
                           onTap: () => ctx.push('/scan'),
@@ -164,9 +166,9 @@ class GroupSettingsScreen extends StatelessWidget {
                           _Divider(),
                           _SettingsTile(
                             icon: Icons.delete_outline,
-                            iconColor: PaypactColors.danger,
+                            iconColor: Theme.of(context).colorScheme.error,
                             title: 'Delete Group',
-                            titleColor: PaypactColors.danger,
+                            titleColor: Theme.of(context).colorScheme.error,
                             showChevron: false,
                             onTap: () => _confirmDelete(ctx, group),
                           ),
@@ -305,8 +307,8 @@ class GroupSettingsScreen extends StatelessWidget {
               onPressed: () => Navigator.pop(dCtx),
               child: const Text('Cancel')),
           ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: PaypactColors.danger),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
             onPressed: () {
               Navigator.pop(dCtx);
               ctx.read<GroupBloc>().add(GroupKickMemberRequested(
@@ -331,8 +333,8 @@ class GroupSettingsScreen extends StatelessWidget {
               onPressed: () => Navigator.pop(dCtx),
               child: const Text('Cancel')),
           ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: PaypactColors.danger),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
             onPressed: () {
               Navigator.pop(dCtx);
               ctx.read<GroupBloc>().add(GroupDeleteRequested(group.id));
@@ -371,8 +373,14 @@ class _GroupIdentityCard extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [PaypactColors.primary, PaypactColors.primaryDark],
+                  gradient: LinearGradient(
+                    colors: [
+                      Theme.of(context).colorScheme.primary,
+                      Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.8)
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -392,8 +400,10 @@ class _GroupIdentityCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '${group.memberCount} member${group.memberCount != 1 ? 's' : ''} · ${group.currency}',
-                      style: const TextStyle(
-                          fontSize: 13, color: PaypactColors.textSecondary),
+                      style: TextStyle(
+                          fontSize: 13,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ]),
             ),
@@ -436,13 +446,14 @@ class _MembersCard extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               leading: CircleAvatar(
                 radius: 20,
-                backgroundColor: PaypactColors.primary.withOpacity(0.1),
+                backgroundColor:
+                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
                 backgroundImage:
                     m.photoUrl != null ? NetworkImage(m.photoUrl!) : null,
                 child: m.photoUrl == null
                     ? Text(m.displayName.substring(0, 1).toUpperCase(),
-                        style: const TextStyle(
-                            color: PaypactColors.primary,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
                             fontWeight: FontWeight.w600,
                             fontSize: 13))
                     : null,
@@ -452,12 +463,13 @@ class _MembersCard extends StatelessWidget {
                     child: Text(m.displayName,
                         style: const TextStyle(
                             fontSize: 14, fontWeight: FontWeight.w500))),
-                if (isMe) _Chip('You', PaypactColors.primary),
+                if (isMe) _Chip('You', Theme.of(context).colorScheme.primary),
                 if (m.isAdmin) _Chip('Admin', PaypactColors.warning),
               ]),
               subtitle: Text(m.email,
-                  style: const TextStyle(
-                      fontSize: 11, color: PaypactColors.textSecondary)),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
               trailing: isAdmin && !isMe
                   ? _MemberMenu(
                       isTargetAdmin: m.isAdmin,
@@ -495,8 +507,8 @@ class _MemberMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert,
-            size: 20, color: PaypactColors.textSecondary),
+        icon: Icon(Icons.more_vert,
+            size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
         onSelected: (v) {
           if (v == 'promote' && onPromote != null) onPromote!();
           if (v == 'demote' && onDemote != null) onDemote!();
@@ -510,7 +522,7 @@ class _MemberMenu extends StatelessWidget {
           PopupMenuItem(
             value: 'kick',
             child: Text('Remove from Group',
-                style: TextStyle(color: PaypactColors.danger)),
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
       );
@@ -547,10 +559,10 @@ class _SectionLabel extends StatelessWidget {
         padding: const EdgeInsets.only(left: 4),
         child: Text(
           text.toUpperCase(),
-          style: const TextStyle(
+          style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: PaypactColors.textSecondary,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               letterSpacing: 0.8),
         ),
       );
@@ -612,16 +624,18 @@ class _SettingsTile extends StatelessWidget {
             style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: titleColor ?? PaypactColors.textPrimary)),
+                color: titleColor ?? Theme.of(context).colorScheme.onSurface)),
         subtitle: subtitle != null
             ? Text(subtitle!,
-                style: const TextStyle(
-                    fontSize: 12, color: PaypactColors.textSecondary))
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant))
             : null,
         trailing: trailing ??
             (showChevron
-                ? const Icon(Icons.chevron_right,
-                    color: PaypactColors.textSecondary, size: 20)
+                ? Icon(Icons.chevron_right,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 20)
                 : null),
       );
 }
@@ -711,9 +725,10 @@ class _EditGroupSheetState extends State<_EditGroupSheet> {
                 return ChoiceChip(
                   label: Text(_catLabel(cat)),
                   selected: sel,
-                  selectedColor: PaypactColors.primary.withOpacity(0.15),
+                  selectedColor:
+                      Theme.of(context).colorScheme.primary.withOpacity(0.15),
                   labelStyle: TextStyle(
-                      color: sel ? PaypactColors.primary : null,
+                      color: sel ? Theme.of(context).colorScheme.primary : null,
                       fontWeight: sel ? FontWeight.w600 : FontWeight.normal),
                   onSelected: (_) => setState(() => _category = cat),
                 );
@@ -725,7 +740,7 @@ class _EditGroupSheetState extends State<_EditGroupSheet> {
               child: ElevatedButton(
                 onPressed: _save,
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: PaypactColors.primary,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -786,10 +801,10 @@ class _CurrencySheet extends StatelessWidget {
               const Text('Group Currency',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
-              const Text(
-                  'This sets the currency for new expenses in this group.',
+              Text('This sets the currency for new expenses in this group.',
                   style: TextStyle(
-                      fontSize: 13, color: PaypactColors.textSecondary)),
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 16),
             ]),
           ),
@@ -819,11 +834,14 @@ class _CurrencySheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                           color: selected
-                              ? PaypactColors.primary
+                              ? Theme.of(context).colorScheme.primary
                               : PaypactColors.divider,
                           width: selected ? 2 : 1),
                       color: selected
-                          ? PaypactColors.primary.withOpacity(0.05)
+                          ? Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.05)
                           : Theme.of(context).cardColor,
                     ),
                     child: Row(children: [
@@ -835,8 +853,8 @@ class _CurrencySheet extends StatelessWidget {
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
                                 color: selected
-                                    ? PaypactColors.primary
-                                    : PaypactColors.textPrimary)),
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.onSurface)),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -848,17 +866,24 @@ class _CurrencySheet extends StatelessWidget {
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                       color: selected
-                                          ? PaypactColors.primary
-                                          : PaypactColors.textPrimary)),
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .primary
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .onSurface)),
                               Text(code,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontSize: 12,
-                                      color: PaypactColors.textSecondary)),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant)),
                             ]),
                       ),
                       if (selected)
-                        const Icon(Icons.check_circle,
-                            color: PaypactColors.primary, size: 18),
+                        Icon(Icons.check_circle,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 18),
                     ]),
                   ),
                 );
@@ -917,9 +942,10 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
             const Text('Add Member',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            const Text('Search by email to add someone.',
+            Text('Search by email to add someone.',
                 style: TextStyle(
-                    fontSize: 13, color: PaypactColors.textSecondary)),
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 20),
             Row(children: [
               Expanded(
@@ -946,7 +972,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                   return ElevatedButton(
                     onPressed: loading ? null : _search,
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: PaypactColors.primary,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 18, vertical: 14),
@@ -983,11 +1009,13 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                     child: Padding(
                         padding: EdgeInsets.all(8),
                         child: CircularProgressIndicator())),
-                MemberSearchStatus.notFound => _StatusRow(Icons.search_off,
-                    PaypactColors.danger, 'No user found with that email.'),
+                MemberSearchStatus.notFound => _StatusRow(
+                    Icons.search_off,
+                    Theme.of(context).colorScheme.error,
+                    'No user found with that email.'),
                 MemberSearchStatus.alreadyMember => _StatusRow(
                     Icons.check_circle_outline,
-                    PaypactColors.textSecondary,
+                    Theme.of(context).colorScheme.onSurfaceVariant,
                     '${state.foundUser?.displayName ?? 'User'} is already in the group.'),
                 MemberSearchStatus.found => _FoundUserCard(
                     user: state.foundUser!,
@@ -999,7 +1027,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                 MemberSearchStatus.added => const SizedBox.shrink(),
                 MemberSearchStatus.addFailure => _StatusRow(
                     Icons.error_outline,
-                    PaypactColors.danger,
+                    Theme.of(context).colorScheme.error,
                     state.memberSearchError ?? 'Failed to add member.'),
               },
             ),
@@ -1035,13 +1063,15 @@ class _FoundUserCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-            color: PaypactColors.primary.withOpacity(0.05),
-            border: Border.all(color: PaypactColors.primary.withOpacity(0.2)),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+            border: Border.all(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.2)),
             borderRadius: BorderRadius.circular(14)),
         child: Row(children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: PaypactColors.primaryLight,
+            backgroundColor:
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
             backgroundImage: (user.photoUrl as String?) != null
                 ? NetworkImage(user.photoUrl as String)
                 : null,
@@ -1061,14 +1091,15 @@ class _FoundUserCard extends StatelessWidget {
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 15)),
                 Text(user.email as String,
-                    style: const TextStyle(
-                        fontSize: 12, color: PaypactColors.textSecondary)),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ])),
           const SizedBox(width: 8),
           ElevatedButton(
             onPressed: loading ? null : onAdd,
             style: ElevatedButton.styleFrom(
-                backgroundColor: PaypactColors.primary,
+                backgroundColor: Theme.of(context).colorScheme.primary,
                 foregroundColor: Colors.white,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

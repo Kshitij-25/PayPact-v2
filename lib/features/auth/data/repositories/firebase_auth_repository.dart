@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dartz/dartz.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:paypact/core/failures/faliures.dart';
 import 'package:paypact/features/auth/data/models/user_model.dart';
@@ -41,16 +42,28 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<Either<AuthFailure, UserEntity>> signInWithGoogle() async {
     try {
-      final googleUser = await _googleSignIn.authenticate();
-      final googleAuth = googleUser.authentication;
-      final credential = fb.GoogleAuthProvider.credential(
-        accessToken: googleAuth.idToken,
-        idToken: googleAuth.idToken,
-      );
-      final userCredential =
-          await _firebaseAuth.signInWithCredential(credential);
-      final user = userCredential.user!;
-      return _upsertUserDocument(user);
+      if (kIsWeb) {
+        // ── Web: use Firebase's built-in popup flow ────────────────────────
+        // GoogleSignIn.authenticate() is NOT supported on web. Instead, use
+        // FirebaseAuth.signInWithPopup which handles the OAuth redirect internally.
+        final provider = fb.GoogleAuthProvider()
+          ..addScope('email')
+          ..addScope('profile');
+        final userCredential = await _firebaseAuth.signInWithPopup(provider);
+        return _upsertUserDocument(userCredential.user!);
+      } else {
+        // ── Mobile / Desktop: use the GoogleSignIn package ─────────────────
+        final googleUser = await _googleSignIn.authenticate();
+        final googleAuth = googleUser.authentication;
+        final credential = fb.GoogleAuthProvider.credential(
+          // google_sign_in v7 authenticate() only exposes idToken.
+          // Firebase Auth accepts a Google credential with idToken alone.
+          idToken: googleAuth.idToken,
+        );
+        final userCredential =
+            await _firebaseAuth.signInWithCredential(credential);
+        return _upsertUserDocument(userCredential.user!);
+      }
     } on fb.FirebaseAuthException catch (e) {
       return Left(AuthFailure(e.message ?? 'Authentication failed'));
     } catch (e) {

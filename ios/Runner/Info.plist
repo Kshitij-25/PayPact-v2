@@ -98,14 +98,5 @@
     <array>
         <string>applinks:paypact-fec8e.web.app</string>
     </array>
-	<key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>paypact</string>
-            </array>
-        </dict>
-    </array>
 </dict>
 </plist>

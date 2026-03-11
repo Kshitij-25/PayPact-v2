@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:icons_plus/icons_plus.dart';
-import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/features/auth/presentation/bloc/auth_bloc.dart';
 
 class SignInScreen extends StatelessWidget {
@@ -13,6 +13,7 @@ class SignInScreen extends StatelessWidget {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state.status == AuthStatus.failure) {
+            print(state.errorMessage);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.errorMessage ?? 'Sign in failed'),
@@ -22,21 +23,28 @@ class SignInScreen extends StatelessWidget {
           }
         },
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Spacer(flex: 2),
-                _buildLogo(context),
-                const SizedBox(height: 16),
-                _buildTagline(),
-                const Spacer(flex: 3),
-                _buildGoogleSignInButton(context),
-                const SizedBox(height: 16),
-                _buildTermsText(),
-                const SizedBox(height: 40),
-              ],
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: Responsive.isWide(context) ? 40 : 28,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Spacer(flex: 2),
+                    _buildLogo(context),
+                    const SizedBox(height: 16),
+                    _buildTagline(context),
+                    const Spacer(flex: 3),
+                    _buildGoogleSignInButton(context),
+                    const SizedBox(height: 16),
+                    _buildTermsText(context),
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -78,13 +86,13 @@ class SignInScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTagline() {
-    return const Text(
+  Widget _buildTagline(BuildContext context) {
+    return Text(
       'Split expenses effortlessly.\nSettle debts with zero drama.',
       textAlign: TextAlign.center,
       style: TextStyle(
         fontSize: 16,
-        color: PaypactColors.textSecondary,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
         height: 1.6,
       ),
     );
@@ -128,13 +136,13 @@ class SignInScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTermsText() {
+  Widget _buildTermsText(BuildContext context) {
     return Text(
       'By continuing, you agree to our Terms of Service\nand Privacy Policy',
       textAlign: TextAlign.center,
       style: TextStyle(
         fontSize: 12,
-        color: PaypactColors.textSecondary,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
         height: 1.5,
       ),
     );

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:paypact/core/theme/app_theme.dart';
+
 import 'package:paypact/core/utils/currency_formatter.dart';
 import 'package:paypact/features/group/domain/entities/debt_entity.dart';
 import 'package:paypact/features/group/domain/entities/member_entity.dart';
@@ -73,7 +73,8 @@ class DebtCard extends StatelessWidget {
               ElevatedButton(
                 onPressed: onSettle,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: PaypactColors.secondary,
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                  foregroundColor: Theme.of(context).colorScheme.onSecondary,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),

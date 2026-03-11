@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:paypact/core/theme/app_theme.dart';
 import 'package:paypact/core/utils/currency_formatter.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/entities/settlement_entity.dart';
@@ -57,19 +57,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isWide = Responsive.isWide(context);
+
     return BlocListener<GroupBloc, GroupState>(
       listenWhen: (prev, curr) => prev.groups != curr.groups,
       listener: (_, state) {
         _maybeRefreshActivity(state.groups.map((g) => g.id).toList());
       },
-      child: Scaffold(
+      child: AdaptiveScaffold(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        destinations: const [
+          AdaptiveDestination(
+            icon: Icon(Icons.group_outlined),
+            selectedIcon: Icon(Icons.group),
+            label: 'Groups',
+          ),
+          AdaptiveDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Activity',
+          ),
+        ],
         appBar: AppBar(
           title: const Text('Paypact'),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.notifications_outlined),
-              onPressed: () {},
-            ),
+            if (!isWide)
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {},
+              ),
             GestureDetector(
               onTap: () => context.push('/profile'),
               child: Padding(
@@ -117,22 +134,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 foregroundColor: Colors.white,
               )
             : null,
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (i) => setState(() => _selectedIndex = i),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.group_outlined),
-              activeIcon: Icon(Icons.group),
-              label: 'Groups',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.receipt_long_outlined),
-              activeIcon: Icon(Icons.receipt_long),
-              label: 'Activity',
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -156,7 +157,12 @@ class _GroupsTab extends StatelessWidget {
           );
         }
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+          padding: EdgeInsets.fromLTRB(
+            Responsive.hPadding(context),
+            16,
+            Responsive.hPadding(context),
+            100,
+          ),
           itemCount: state.groups.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
           itemBuilder: (context, index) => GroupCard(
@@ -217,9 +223,10 @@ class _ActivityTab extends StatelessWidget {
         }
 
         final groups = ctx.read<GroupBloc>().state.groups;
+        final hPad = Responsive.hPadding(context);
 
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 32),
           itemCount: feed.length,
           separatorBuilder: (_, __) => const Divider(height: 1, indent: 64),
           itemBuilder: (_, i) {
@@ -246,13 +253,13 @@ class _ActivityTab extends StatelessWidget {
                       '';
               return _ActivityTile(
                 emoji: '🤝',
-                emojiColor: PaypactColors.secondary,
+                emojiColor: Theme.of(context).colorScheme.secondary,
                 title: 'Settlement',
                 subtitle: groupName.isNotEmpty
                     ? '$groupName · ${DateFormat('MMM d').format(s.createdAt)}'
                     : DateFormat('MMM d').format(s.createdAt),
                 amount: CurrencyFormatter.format(s.amount, s.currency),
-                amountColor: PaypactColors.secondary,
+                amountColor: Theme.of(context).colorScheme.secondary,
                 badge: 'Settled',
               );
             }
@@ -326,16 +333,18 @@ class _ActivityTile extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 1),
                         decoration: BoxDecoration(
-                          color:
-                              PaypactColors.secondary.withValues(alpha: 0.12),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .secondary
+                              .withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           badge!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: PaypactColors.secondary,
+                            color: Theme.of(context).colorScheme.secondary,
                           ),
                         ),
                       ),
@@ -344,8 +353,10 @@ class _ActivityTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(subtitle,
-                    style: const TextStyle(
-                        fontSize: 12, color: PaypactColors.textSecondary)),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant)),
               ],
             ),
           ),

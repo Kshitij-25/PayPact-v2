@@ -14,6 +14,7 @@ import 'package:paypact/features/expense/presentation/bloc/expense_bloc.dart';
 import 'package:paypact/features/expense/presentation/widgets/expense_list_item.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/presentation/bloc/group_bloc.dart';
+import 'package:paypact/features/group/presentation/screens/qr_invite_sheet.dart';
 import 'package:paypact/features/group/presentation/widgets/debt_card.dart';
 import 'package:paypact/widgets/empty_states.dart';
 import 'package:share_plus/share_plus.dart';
@@ -72,7 +73,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                 IconButton(
                   icon: const Icon(Icons.person_add_outlined),
                   tooltip: 'Add member',
-                  onPressed: () => _showAddMemberSheet(ctx),
+                  onPressed: () => _showAddMemberPicker(ctx),
                 ),
                 IconButton(
                   icon: const Icon(Icons.settings_outlined),
@@ -95,9 +96,6 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
               ],
               bottom: TabBar(
                 controller: _tabController,
-                labelColor: PaypactColors.primary,
-                unselectedLabelColor: PaypactColors.textSecondary,
-                indicatorColor: PaypactColors.primary,
                 tabs: const [
                   Tab(text: 'Overview'),
                   Tab(text: 'Expenses'),
@@ -120,8 +118,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                   context.push('/group/${widget.groupId}/expense/add'),
               icon: const Icon(Icons.add),
               label: const Text('Add Expense'),
-              backgroundColor: PaypactColors.primary,
-              foregroundColor: Colors.white,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
           );
         },
@@ -135,15 +133,22 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
     if (link != null) Share.share('Join my group on Paypact: $link');
   }
 
-  void _showAddMemberSheet(BuildContext ctx) {
-    ctx.read<GroupBloc>().add(GroupMemberSearchCleared());
+  void _showAddMemberPicker(BuildContext ctx) {
+    final group = ctx
+        .read<GroupBloc>()
+        .state
+        .groups
+        .where((g) => g.id == widget.groupId)
+        .firstOrNull;
+
     showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => BlocProvider.value(
-        value: ctx.read<GroupBloc>(),
-        child: _AddMemberSheet(groupId: widget.groupId),
+      builder: (_) => _AddMemberPickerSheet(
+        groupId: widget.groupId,
+        groupName: group?.name ?? 'Group',
+        groupBloc: ctx.read<GroupBloc>(),
       ),
     );
   }
@@ -167,7 +172,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
               child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: PaypactColors.secondary),
+                backgroundColor: ctx.findAncestorStateOfType<State>() != null
+                    ? Theme.of(ctx).colorScheme.secondary
+                    : null),
             onPressed: () {
               Navigator.pop(dCtx);
               for (final debt in debts) {
@@ -250,10 +257,10 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: PaypactColors.textSecondary,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
             letterSpacing: 0.8),
       );
 }
@@ -268,11 +275,12 @@ class _StatsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = group.currency;
+    final cs = Theme.of(context).colorScheme;
     final Color balColor = myBalance > 0
-        ? PaypactColors.secondary
+        ? cs.secondary
         : myBalance < 0
-            ? PaypactColors.danger
-            : PaypactColors.textSecondary;
+            ? cs.error
+            : cs.onSurfaceVariant;
     final String balLabel = myBalance > 0
         ? 'you get back'
         : myBalance < 0
@@ -283,7 +291,7 @@ class _StatsRow extends StatelessWidget {
       Expanded(
         child: _StatCard(
           icon: Icons.receipt_long_outlined,
-          iconColor: PaypactColors.primary,
+          iconColor: cs.primary,
           label: 'Total Spent',
           value: CurrencyFormatter.format(group.totalExpenses, c),
         ),
@@ -341,14 +349,16 @@ class _StatCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(label,
-                  style: const TextStyle(
-                      fontSize: 10, color: PaypactColors.textSecondary)),
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 2),
               Text(value,
                   style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
-                      color: valueColor ?? PaypactColors.textPrimary),
+                      color: valueColor ??
+                          Theme.of(context).colorScheme.onSurface),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
             ],
@@ -393,18 +403,6 @@ class _CategoryDonutChartState extends State<_CategoryDonutChart> {
         ExpenseCategory.health => '💊',
         ExpenseCategory.education => '📚',
         ExpenseCategory.other => '📦',
-      };
-
-  static String _label(ExpenseCategory c) => switch (c) {
-        ExpenseCategory.food => 'Food',
-        ExpenseCategory.transport => 'Transport',
-        ExpenseCategory.accommodation => 'Stay',
-        ExpenseCategory.entertainment => 'Fun',
-        ExpenseCategory.shopping => 'Shop',
-        ExpenseCategory.utilities => 'Bills',
-        ExpenseCategory.health => 'Health',
-        ExpenseCategory.education => 'Study',
-        ExpenseCategory.other => 'Other',
       };
 
   @override
@@ -474,8 +472,9 @@ class _CategoryDonutChartState extends State<_CategoryDonutChart> {
                 const SizedBox(width: 4),
                 Text(
                   '${_emoji(cat)} ${CurrencyFormatter.format(amt, widget.currency)}',
-                  style: const TextStyle(
-                      fontSize: 11, color: PaypactColors.textSecondary),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ]);
             }).toList(),
@@ -519,8 +518,8 @@ class _MemberBalanceChart extends StatelessWidget {
                     toY: bal,
                     fromY: 0,
                     color: bal >= 0
-                        ? PaypactColors.secondary
-                        : PaypactColors.danger,
+                        ? Theme.of(context).colorScheme.secondary
+                        : Theme.of(context).colorScheme.error,
                     width: 24,
                     borderRadius: bal >= 0
                         ? const BorderRadius.vertical(top: Radius.circular(5))
@@ -541,9 +540,11 @@ class _MemberBalanceChart extends StatelessWidget {
                       return Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(name.split(' ').first,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 10,
-                                color: PaypactColors.textSecondary)),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant)),
                       );
                     },
                   ),
@@ -554,8 +555,10 @@ class _MemberBalanceChart extends StatelessWidget {
                     reservedSize: 48,
                     getTitlesWidget: (val, _) => Text(
                       val.abs().toStringAsFixed(0),
-                      style: const TextStyle(
-                          fontSize: 9, color: PaypactColors.textSecondary),
+                      style: TextStyle(
+                          fontSize: 9,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ),
                 ),
@@ -567,8 +570,9 @@ class _MemberBalanceChart extends StatelessWidget {
               gridData: FlGridData(
                 drawVerticalLine: false,
                 horizontalInterval: maxAbs / 2,
-                getDrawingHorizontalLine: (_) =>
-                    const FlLine(color: PaypactColors.divider, strokeWidth: 1),
+                getDrawingHorizontalLine: (_) => FlLine(
+                    color: Theme.of(context).colorScheme.outline,
+                    strokeWidth: 1),
               ),
               borderData: FlBorderData(show: false),
               barTouchData: BarTouchData(
@@ -688,59 +692,59 @@ class _SettlementTile extends StatelessWidget {
   final String toName;
 
   @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                  color: PaypactColors.secondary.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10)),
-              child: const Center(
-                  child: Text('🤝', style: TextStyle(fontSize: 20))),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('$fromName paid $toName',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w500, fontSize: 15)),
-                    const SizedBox(height: 3),
-                    Row(children: [
-                      Text(DateFormat('MMM d').format(settlement.createdAt),
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: PaypactColors.textSecondary)),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                            color: PaypactColors.secondary.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(4)),
-                        child: const Text('Settlement',
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: PaypactColors.secondary)),
-                      ),
-                    ]),
-                  ]),
-            ),
-            Text(
-              CurrencyFormatter.format(settlement.amount, settlement.currency),
-              style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                  color: PaypactColors.secondary),
-            ),
-          ]),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+                color: cs.secondary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10)),
+            child:
+                const Center(child: Text('🤝', style: TextStyle(fontSize: 20))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('$fromName paid $toName',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 15,
+                      color: cs.onSurface)),
+              const SizedBox(height: 3),
+              Row(children: [
+                Text(DateFormat('MMM d').format(settlement.createdAt),
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                      color: cs.secondary.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(4)),
+                  child: Text('Settlement',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: cs.secondary)),
+                ),
+              ]),
+            ]),
+          ),
+          Text(
+            CurrencyFormatter.format(settlement.amount, settlement.currency),
+            style: TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 15, color: cs.secondary),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -771,8 +775,11 @@ class _BalancesTab extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [PaypactColors.primary, PaypactColors.primaryDark],
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primaryContainer,
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -810,10 +817,10 @@ class _BalancesTab extends StatelessWidget {
         const SizedBox(height: 16),
         ...group.members.map((m) {
           final Color c = m.isSettled
-              ? PaypactColors.textSecondary
+              ? Theme.of(context).colorScheme.onSurfaceVariant
               : m.isOwed
-                  ? PaypactColors.secondary
-                  : PaypactColors.danger;
+                  ? Theme.of(context).colorScheme.secondary
+                  : Theme.of(context).colorScheme.error;
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
@@ -893,7 +900,7 @@ class _SettleUpTab extends StatelessWidget {
                 child: _ActionChip(
                   icon: Icons.auto_fix_high_outlined,
                   label: 'Simplify Debts',
-                  color: PaypactColors.primary,
+                  color: Theme.of(context).colorScheme.primary,
                   onTap: () => ctx
                       .read<ExpenseBloc>()
                       .add(ExpenseDebtsRequested(groupId)),
@@ -904,7 +911,7 @@ class _SettleUpTab extends StatelessWidget {
                 child: _ActionChip(
                   icon: Icons.check_circle_outline,
                   label: 'Settle All',
-                  color: PaypactColors.secondary,
+                  color: Theme.of(context).colorScheme.secondary,
                   onTap: () => _confirmSettleAll(ctx, state, group),
                 ),
               ),
@@ -924,19 +931,19 @@ class _SettleUpTab extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                    color: PaypactColors.warning.withOpacity(0.1),
+                    color: const Color(0xFFF59E0B).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: PaypactColors.warning.withOpacity(0.3))),
+                        color: const Color(0xFFF59E0B).withOpacity(0.3))),
                 child: Row(children: [
                   const Icon(Icons.info_outline,
-                      color: PaypactColors.warning, size: 18),
+                      color: Color(0xFFF59E0B), size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Simplified to ${state.simplifiedDebts.length} transaction${state.simplifiedDebts.length > 1 ? 's' : ''} · tap Simplify to recalculate',
                       style: const TextStyle(
-                          fontSize: 12, color: PaypactColors.warning),
+                          fontSize: 12, color: Color(0xFFF59E0B)),
                     ),
                   ),
                 ]),
@@ -985,7 +992,8 @@ class _SettleUpTab extends StatelessWidget {
               child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: PaypactColors.secondary),
+                backgroundColor: Theme.of(ctx).colorScheme.secondary,
+                foregroundColor: Theme.of(ctx).colorScheme.onSecondary),
             onPressed: () {
               Navigator.pop(dCtx);
               for (final debt in debts) {
@@ -1110,9 +1118,10 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
               const Text('Add Member',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
-              const Text('Search by email address to add someone.',
+              Text('Search by email address to add someone.',
                   style: TextStyle(
-                      fontSize: 13, color: PaypactColors.textSecondary)),
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 20),
               // Search row
               Row(children: [
@@ -1141,8 +1150,9 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                     return ElevatedButton(
                       onPressed: searching ? null : search,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: PaypactColors.primary,
-                        foregroundColor: Colors.white,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor:
+                            Theme.of(context).colorScheme.onPrimary,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 18, vertical: 14),
                         shape: RoundedRectangleBorder(
@@ -1183,13 +1193,18 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                             child: CircularProgressIndicator())),
                     MemberSearchStatus.notFound => _StatusPill(
                         icon: Icons.search_off,
-                        color: PaypactColors.danger,
+                        color: Theme.of(context).colorScheme.error,
                         text: 'No user found with that email address.'),
                     MemberSearchStatus.alreadyMember => _StatusPill(
                         icon: Icons.check_circle_outline,
-                        color: PaypactColors.textSecondary,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         text:
                             '${state.foundUser?.displayName ?? 'This user'} is already in the group.'),
+                    MemberSearchStatus.addFailure => _StatusPill(
+                        icon: Icons.error_outline,
+                        color: Theme.of(context).colorScheme.error,
+                        text: state.memberSearchError ??
+                            'Failed to add member. Please try again.'),
                     MemberSearchStatus.found => _FoundUserCard(
                         user: state.foundUser!,
                         onAdd: () => ctx.read<GroupBloc>().add(
@@ -1199,11 +1214,6 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                     MemberSearchStatus.adding => _FoundUserCard(
                         user: state.foundUser!, loading: true, onAdd: () {}),
                     MemberSearchStatus.added => const SizedBox.shrink(),
-                    MemberSearchStatus.addFailure => _StatusPill(
-                        icon: Icons.error_outline,
-                        color: PaypactColors.danger,
-                        text: state.memberSearchError ??
-                            'Failed to add member. Please try again.'),
                   };
                 },
               ),
@@ -1250,17 +1260,18 @@ class _FoundUserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: PaypactColors.primary.withOpacity(0.05),
-        border: Border.all(color: PaypactColors.primary.withOpacity(0.2)),
+        color: cs.primary.withOpacity(0.05),
+        border: Border.all(color: cs.primary.withOpacity(0.2)),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(children: [
         CircleAvatar(
           radius: 22,
-          backgroundColor: PaypactColors.primaryLight,
+          backgroundColor: cs.primaryContainer,
           backgroundImage:
               user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
           child: user.photoUrl == null
@@ -1268,8 +1279,9 @@ class _FoundUserCard extends StatelessWidget {
                   user.displayName.isNotEmpty
                       ? user.displayName[0].toUpperCase()
                       : '?',
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600))
+                  style: TextStyle(
+                      color: cs.onPrimaryContainer,
+                      fontWeight: FontWeight.w600))
               : null,
         ),
         const SizedBox(width: 12),
@@ -1278,11 +1290,12 @@ class _FoundUserCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(user.displayName,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 15)),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: cs.onSurface)),
               Text(user.email,
-                  style: const TextStyle(
-                      fontSize: 12, color: PaypactColors.textSecondary)),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
             ],
           ),
         ),
@@ -1290,21 +1303,213 @@ class _FoundUserCard extends StatelessWidget {
         ElevatedButton(
           onPressed: loading ? null : onAdd,
           style: ElevatedButton.styleFrom(
-            backgroundColor: PaypactColors.primary,
-            foregroundColor: Colors.white,
+            backgroundColor: cs.primary,
+            foregroundColor: cs.onPrimary,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
           child: loading
-              ? const SizedBox(
+              ? SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
+                      strokeWidth: 2, color: cs.onPrimary))
               : const Text('Add'),
         ),
       ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add Member — Method Picker
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AddMemberPickerSheet extends StatelessWidget {
+  const _AddMemberPickerSheet({
+    required this.groupId,
+    required this.groupName,
+    required this.groupBloc,
+  });
+
+  final String groupId;
+  final String groupName;
+  final GroupBloc groupBloc;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Handle ──────────────────────────────────────────────────────
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Add Member',
+            style: TextStyle(
+                fontSize: 18, fontWeight: FontWeight.w700, color: cs.onSurface),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Choose how to invite someone to $groupName',
+            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Option 1: Search by email ────────────────────────────────
+          _OptionTile(
+            icon: Icons.email_outlined,
+            iconColor: cs.primary,
+            title: 'Search by Email',
+            subtitle: 'Find and add a registered Paypact user',
+            onTap: () {
+              Navigator.pop(context);
+              groupBloc.add(GroupMemberSearchCleared());
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => BlocProvider.value(
+                  value: groupBloc,
+                  child: _AddMemberSheet(groupId: groupId),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+
+          // ── Option 2: QR Code ────────────────────────────────────────
+          _OptionTile(
+            icon: Icons.qr_code_2_outlined,
+            iconColor: const Color(0xFF8B5CF6),
+            title: 'Show QR Code',
+            subtitle: 'Let someone scan to join instantly',
+            onTap: () {
+              Navigator.pop(context);
+              groupBloc.add(GroupInviteLinkRequested(groupId));
+              Future.delayed(const Duration(milliseconds: 400), () {
+                if (!context.mounted) return;
+                final state = groupBloc.state;
+                final group =
+                    state.groups.where((g) => g.id == groupId).firstOrNull;
+                final code = group?.inviteCode;
+                if (code == null || code.isEmpty) return;
+                final link = 'https://paypact-fec8e.web.app/invite/$code';
+                QrInviteSheet.show(
+                  context,
+                  groupName: groupName,
+                  inviteCode: code,
+                  inviteLink: link,
+                );
+              });
+            },
+          ),
+          const SizedBox(height: 10),
+
+          // ── Option 3: Invite Link ────────────────────────────────────
+          _OptionTile(
+            icon: Icons.link_rounded,
+            iconColor: cs.secondary,
+            title: 'Share Invite Link',
+            subtitle: 'Copy or share a link anyone can tap to join',
+            onTap: () {
+              Navigator.pop(context);
+              groupBloc.add(GroupInviteLinkRequested(groupId));
+              Future.delayed(const Duration(milliseconds: 400), () {
+                if (!context.mounted) return;
+                final link = groupBloc.state.inviteLink;
+                if (link != null) {
+                  Share.share(
+                    'Join my group "$groupName" on Paypact!\n\n$link',
+                  );
+                }
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reusable option tile for the picker sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OptionTile extends StatelessWidget {
+  const _OptionTile({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: cs.outlineVariant),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: iconColor, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: cs.onSurface)),
+                const SizedBox(height: 2),
+                Text(subtitle,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, color: cs.onSurfaceVariant, size: 20),
+        ]),
+      ),
     );
   }
 }

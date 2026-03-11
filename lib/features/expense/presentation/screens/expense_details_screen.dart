@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:paypact/core/theme/app_theme.dart';
 import 'package:paypact/core/utils/currency_formatter.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/features/expense/presentation/bloc/expense_bloc.dart';
 import 'package:paypact/features/group/presentation/bloc/group_bloc.dart';
 
@@ -13,6 +13,7 @@ class ExpenseDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final expense = context
         .read<ExpenseBloc>()
         .state
@@ -46,7 +47,7 @@ class ExpenseDetailScreen extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline, color: PaypactColors.danger),
+            icon: Icon(Icons.delete_outline, color: cs.error),
             tooltip: 'Delete',
             onPressed: () {
               context
@@ -57,52 +58,66 @@ class ExpenseDetailScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          _buildHeader(expense.title, expense.amount, expense.currency),
-          const SizedBox(height: 24),
-          _buildInfoRow('Date',
-              DateFormat('MMM d, yyyy · h:mm a').format(expense.createdAt)),
-          _buildInfoRow('Category', expense.category.name),
-          _buildInfoRow('Split type', expense.splitType.name),
-          if (expense.description != null)
-            _buildInfoRow('Note', expense.description!),
-          const Divider(height: 32),
-          const Text('Paid by',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-          const SizedBox(height: 12),
-          ...expense.paidBy.entries.map(
-            (e) => _buildSplitRow(
-              memberName(e.key),
-              expense.currency,
-              e.value,
-              isPositive: true,
+      body: ResponsiveCenter(
+        maxWidth: 720,
+        child: ListView(
+          padding: EdgeInsets.all(Responsive.hPadding(context)),
+          children: [
+            _buildHeader(context, expense.title, expense.amount,
+                expense.currency),
+            const SizedBox(height: 24),
+            _buildInfoRow(context, 'Date',
+                DateFormat('MMM d, yyyy · h:mm a').format(expense.createdAt)),
+            _buildInfoRow(context, 'Category', expense.category.name),
+            _buildInfoRow(context, 'Split type', expense.splitType.name),
+            if (expense.description != null)
+              _buildInfoRow(context, 'Note', expense.description!),
+            const Divider(height: 32),
+            Text('Paid by',
+                style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: cs.onSurface)),
+            const SizedBox(height: 12),
+            ...expense.paidBy.entries.map(
+              (e) => _buildSplitRow(
+                context,
+                memberName(e.key),
+                expense.currency,
+                e.value,
+                isPositive: true,
+              ),
             ),
-          ),
-          const Divider(height: 32),
-          const Text('Split among',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-          const SizedBox(height: 12),
-          ...expense.splits.map(
-            (s) => _buildSplitRow(
-              memberName(s.userId),
-              expense.currency,
-              s.amount,
-              isPositive: false,
+            const Divider(height: 32),
+            Text('Split among',
+                style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: cs.onSurface)),
+            const SizedBox(height: 12),
+            ...expense.splits.map(
+              (s) => _buildSplitRow(
+                context,
+                memberName(s.userId),
+                expense.currency,
+                s.amount,
+                isPositive: false,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildHeader(String title, double amount, String currency) {
+  Widget _buildHeader(
+      BuildContext context, String title, double amount, String currency) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [PaypactColors.primary, PaypactColors.primaryLight],
+        gradient: LinearGradient(
+          colors: [cs.primary, cs.primaryContainer],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -112,8 +127,8 @@ class ExpenseDetailScreen extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: cs.onPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w600,
             ),
@@ -121,8 +136,8 @@ class ExpenseDetailScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             CurrencyFormatter.format(amount, currency),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: cs.onPrimary,
               fontSize: 32,
               fontWeight: FontWeight.w700,
             ),
@@ -132,7 +147,8 @@ class ExpenseDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(BuildContext context, String label, String value) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -141,41 +157,41 @@ class ExpenseDetailScreen extends StatelessWidget {
           SizedBox(
             width: 100,
             child: Text(label,
-                style: const TextStyle(color: PaypactColors.textSecondary)),
+                style: TextStyle(color: cs.onSurfaceVariant)),
           ),
           Expanded(
             child: Text(value,
-                style: const TextStyle(fontWeight: FontWeight.w500)),
+                style: TextStyle(
+                    fontWeight: FontWeight.w500, color: cs.onSurface)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSplitRow(String name, String currency, double amount,
+  Widget _buildSplitRow(BuildContext context, String name, String currency,
+      double amount,
       {required bool isPositive}) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
           CircleAvatar(
             radius: 18,
-            backgroundColor: PaypactColors.primaryLight.withOpacity(0.15),
+            backgroundColor: cs.primaryContainer.withValues(alpha: 0.4),
             child: Text(
               name.substring(0, 1).toUpperCase(),
-              style: const TextStyle(
-                  color: PaypactColors.primary, fontWeight: FontWeight.w600),
+              style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(width: 12),
-          Expanded(child: Text(name)),
+          Expanded(child: Text(name, style: TextStyle(color: cs.onSurface))),
           Text(
             CurrencyFormatter.format(amount, currency),
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              color: isPositive
-                  ? PaypactColors.secondary
-                  : PaypactColors.textPrimary,
+              color: isPositive ? cs.secondary : cs.onSurface,
             ),
           ),
         ],

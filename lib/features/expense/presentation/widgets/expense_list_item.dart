@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
-import 'package:paypact/core/theme/app_theme.dart';
+
 import 'package:paypact/core/utils/currency_formatter.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 
@@ -61,8 +61,11 @@ class ExpenseListItem extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         DateFormat('MMM d').format(expense.createdAt),
-                        style: const TextStyle(
-                            fontSize: 12, color: PaypactColors.textSecondary),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -87,9 +90,9 @@ class ExpenseListItem extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                         color: isSettled
-                            ? PaypactColors.textSecondary
+                            ? Theme.of(context).colorScheme.onSurfaceVariant
                             : isLent
-                                ? PaypactColors.secondary
+                                ? Theme.of(context).colorScheme.secondary
                                 : Theme.of(context).colorScheme.error,
                       ),
                     ),

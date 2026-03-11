@@ -23,6 +23,7 @@ import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/entities/member_entity.dart';
 import 'package:paypact/features/group/presentation/bloc/group_bloc.dart';
 import 'package:paypact/features/profile/presentation/bloc/settings_bloc.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/widgets/section_label.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,10 +293,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       appBar: AppBar(
         title: Text(widget.isEditing ? 'Edit Expense' : 'Add Expense'),
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+      body: ResponsiveCenter(
+        maxWidth: 720,
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              Responsive.hPadding(context),
+              16,
+              Responsive.hPadding(context),
+              120,
+            ),
           children: [
             TitleField(controller: _titleCtrl),
             const SizedBox(height: 14),
@@ -345,7 +353,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 currency: currency,
               ),
             ],
-          ],
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: SubmitBar(

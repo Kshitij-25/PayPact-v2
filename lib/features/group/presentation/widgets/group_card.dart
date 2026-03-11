@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:paypact/core/theme/app_theme.dart';
+
 import 'package:paypact/core/utils/currency_formatter.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 
@@ -44,9 +44,9 @@ class GroupCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       '${group.memberCount} members · ${CurrencyFormatter.format(group.totalExpenses, group.currency)} total',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: PaypactColors.textSecondary,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -84,10 +84,13 @@ class GroupCard extends StatelessWidget {
   Widget _buildBalanceBadge(
       BuildContext context, double balance, String currency) {
     if (balance == 0) {
-      return const Chip(
+      return Chip(
         label: Text('Settled',
-            style: TextStyle(fontSize: 12, color: PaypactColors.textSecondary)),
-        backgroundColor: Color(0xFFF3F4F6),
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        backgroundColor:
+            Theme.of(context).colorScheme.surfaceContainerHighest,
         padding: EdgeInsets.zero,
       );
     }
@@ -97,8 +100,9 @@ class GroupCard extends StatelessWidget {
       children: [
         Text(
           isOwed ? 'you get' : 'you owe',
-          style:
-              const TextStyle(fontSize: 11, color: PaypactColors.textSecondary),
+          style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
         Text(
           CurrencyFormatter.format(balance.abs(), currency),
@@ -106,7 +110,7 @@ class GroupCard extends StatelessWidget {
             fontWeight: FontWeight.w700,
             fontSize: 15,
             color: isOwed
-                ? PaypactColors.secondary
+                ? Theme.of(context).colorScheme.secondary
                 : Theme.of(context).colorScheme.error,
           ),
         ),

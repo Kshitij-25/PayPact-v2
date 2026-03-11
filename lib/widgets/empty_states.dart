@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:paypact/core/theme/app_theme.dart';
 
 class EmptyState extends StatelessWidget {
   const EmptyState({
@@ -48,9 +47,9 @@ class EmptyState extends StatelessWidget {
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: PaypactColors.textSecondary,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 height: 1.5,
               ),
             ),

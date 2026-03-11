@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:paypact/features/profile/presentation/bloc/settings_bloc.dart';
 
@@ -18,125 +18,133 @@ class ProfileScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // ── Avatar + name ──────────────────────────────────────────────
-          Center(
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 44,
-                  backgroundColor: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.4),
-                  backgroundImage: user?.photoUrl != null
-                      ? CachedNetworkImageProvider(user!.photoUrl!)
-                      : null,
-                  child: user?.photoUrl == null
-                      ? Text(
-                          user?.displayName.substring(0, 1).toUpperCase() ??
-                              'U',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w600),
-                        )
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  user?.displayName ?? '',
-                  style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  user?.email ?? '',
-                  style: const TextStyle(
-                      color: PaypactColors.textSecondary, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-
-          // ── Settings group ─────────────────────────────────────────────
-          _GroupLabel('Preferences'),
-          const SizedBox(height: 8),
-          _SettingsCard(children: [
-            _SettingsTile(
-              icon: Icons.notifications_outlined,
-              iconColor: Theme.of(context).colorScheme.primary,
-              title: 'Notifications',
-              subtitle: Text('Expenses, settlements, invites'),
-              onTap: () => _showSheet(context, _NotificationsSheet()),
-            ),
-            _Divider(),
-            _SettingsTile(
-              icon: Icons.palette_outlined,
-              iconColor: const Color(0xFF8B5CF6),
-              title: 'Appearance',
-              subtitle: BlocBuilder<SettingsBloc, SettingsState>(
-                buildWhen: (p, c) => p.themeMode != c.themeMode,
-                builder: (_, s) => Text(_themeName(s.themeMode),
+      body: ResponsiveCenter(
+        maxWidth: 640,
+        child: ListView(
+          padding: EdgeInsets.all(Responsive.hPadding(context)),
+          children: [
+            // ── Avatar + name ──────────────────────────────────────────────
+            Center(
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 44,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.4),
+                    backgroundImage: user?.photoUrl != null
+                        ? CachedNetworkImageProvider(user!.photoUrl!)
+                        : null,
+                    child: user?.photoUrl == null
+                        ? Text(
+                            user?.displayName.substring(0, 1).toUpperCase() ??
+                                'U',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w600),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    user?.displayName ?? '',
                     style: const TextStyle(
-                        fontSize: 13, color: PaypactColors.textSecondary)),
+                        fontSize: 20, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    user?.email ?? '',
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 14),
+                  ),
+                ],
               ),
-              onTap: () => _showSheet(context, _AppearanceSheet()),
             ),
-            _Divider(),
-            _SettingsTile(
-              icon: Icons.language_outlined,
-              iconColor: Theme.of(context).colorScheme.secondary,
-              title: 'Currency & Language',
-              subtitle: BlocBuilder<SettingsBloc, SettingsState>(
-                buildWhen: (p, c) =>
-                    p.currency != c.currency ||
-                    p.languageCode != c.languageCode,
-                builder: (_, s) => Text(
-                  '${s.currency} · ${_langName(s.languageCode)}',
-                  style: const TextStyle(
-                      fontSize: 13, color: PaypactColors.textSecondary),
+            const SizedBox(height: 32),
+
+            // ── Settings group ─────────────────────────────────────────────
+            _GroupLabel('Preferences'),
+            const SizedBox(height: 8),
+            _SettingsCard(children: [
+              _SettingsTile(
+                icon: Icons.notifications_outlined,
+                iconColor: Theme.of(context).colorScheme.primary,
+                title: 'Notifications',
+                subtitle: Text('Expenses, settlements, invites'),
+                onTap: () => _showSheet(context, _NotificationsSheet()),
+              ),
+              _Divider(),
+              _SettingsTile(
+                icon: Icons.palette_outlined,
+                iconColor: const Color(0xFF8B5CF6),
+                title: 'Appearance',
+                subtitle: BlocBuilder<SettingsBloc, SettingsState>(
+                  buildWhen: (p, c) => p.themeMode != c.themeMode,
+                  builder: (_, s) => Text(_themeName(s.themeMode),
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant)),
                 ),
+                onTap: () => _showSheet(context, _AppearanceSheet()),
               ),
-              onTap: () => _showSheet(context, _CurrencyLanguageSheet()),
-            ),
-          ]),
+              _Divider(),
+              _SettingsTile(
+                icon: Icons.language_outlined,
+                iconColor: Theme.of(context).colorScheme.secondary,
+                title: 'Currency & Language',
+                subtitle: BlocBuilder<SettingsBloc, SettingsState>(
+                  buildWhen: (p, c) =>
+                      p.currency != c.currency ||
+                      p.languageCode != c.languageCode,
+                  builder: (_, s) => Text(
+                    '${s.currency} · ${_langName(s.languageCode)}',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
+                onTap: () => _showSheet(context, _CurrencyLanguageSheet()),
+              ),
+            ]),
 
-          const SizedBox(height: 20),
-          _GroupLabel('Legal'),
-          const SizedBox(height: 8),
-          _SettingsCard(children: [
-            _SettingsTile(
-              icon: Icons.privacy_tip_outlined,
-              iconColor: PaypactColors.textSecondary,
-              title: 'Privacy Policy',
-              onTap: () {},
-            ),
-            _Divider(),
-            _SettingsTile(
-              icon: Icons.description_outlined,
-              iconColor: PaypactColors.textSecondary,
-              title: 'Terms of Service',
-              onTap: () {},
-            ),
-          ]),
+            const SizedBox(height: 20),
+            _GroupLabel('Legal'),
+            const SizedBox(height: 8),
+            _SettingsCard(children: [
+              _SettingsTile(
+                icon: Icons.privacy_tip_outlined,
+                iconColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                title: 'Privacy Policy',
+                onTap: () {},
+              ),
+              _Divider(),
+              _SettingsTile(
+                icon: Icons.description_outlined,
+                iconColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                title: 'Terms of Service',
+                onTap: () {},
+              ),
+            ]),
 
-          const SizedBox(height: 20),
-          _SettingsCard(children: [
-            _SettingsTile(
-              icon: Icons.logout,
-              iconColor: Theme.of(context).colorScheme.error,
-              title: 'Sign Out',
-              titleColor: Theme.of(context).colorScheme.error,
-              showChevron: false,
-              onTap: () => context.read<AuthBloc>().add(AuthSignOutRequested()),
-            ),
-          ]),
-          const SizedBox(height: 40),
-        ],
+            const SizedBox(height: 20),
+            _SettingsCard(children: [
+              _SettingsTile(
+                icon: Icons.logout,
+                iconColor: Theme.of(context).colorScheme.error,
+                title: 'Sign Out',
+                titleColor: Theme.of(context).colorScheme.error,
+                showChevron: false,
+                onTap: () => context.read<AuthBloc>().add(AuthSignOutRequested()),
+              ),
+            ]),
+            const SizedBox(height: 40),
+          ],
+        ),
       ),
     );
   }
@@ -185,10 +193,10 @@ class _GroupLabel extends StatelessWidget {
         padding: const EdgeInsets.only(left: 4),
         child: Text(
           text.toUpperCase(),
-          style: const TextStyle(
+          style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: PaypactColors.textSecondary,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               letterSpacing: 0.8),
         ),
       );
@@ -250,12 +258,12 @@ class _SettingsTile extends StatelessWidget {
         style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w500,
-            color: titleColor ?? Theme.of(context).colorScheme.onPrimary),
+            color: titleColor ?? Theme.of(context).colorScheme.onSurface),
       ),
       subtitle: subtitle,
       trailing: showChevron
-          ? const Icon(Icons.chevron_right,
-              color: PaypactColors.textSecondary, size: 20)
+          ? Icon(Icons.chevron_right,
+              color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20)
           : null,
     );
   }
@@ -285,14 +293,16 @@ class _SheetShell extends StatelessWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                  color: Colors.grey[300],
+                  color: Theme.of(context).colorScheme.outlineVariant,
                   borderRadius: BorderRadius.circular(2)),
             ),
           ),
           const SizedBox(height: 18),
           Text(title,
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurface)),
           const SizedBox(height: 20),
           child,
         ],
@@ -373,6 +383,7 @@ class _NotifyTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -382,24 +393,20 @@ class _NotifyTile extends StatelessWidget {
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-              color: (value
-                      ? Theme.of(context).colorScheme.primary
-                      : PaypactColors.textSecondary)
+              color: (value ? cs.primary : cs.onSurfaceVariant)
                   .withOpacity(0.1),
               borderRadius: BorderRadius.circular(8)),
           child: Icon(icon,
               size: 18,
-              color: value
-                  ? Theme.of(context).colorScheme.primary
-                  : PaypactColors.textSecondary),
+              color: value ? cs.primary : cs.onSurfaceVariant),
         ),
         title: Text(title,
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         subtitle: Text(subtitle,
-            style: const TextStyle(
-                fontSize: 12, color: PaypactColors.textSecondary)),
+            style: TextStyle(
+                fontSize: 12, color: cs.onSurfaceVariant)),
         value: value,
-        activeThumbColor: Theme.of(context).colorScheme.primary,
+        activeThumbColor: cs.primary,
         onChanged: onChanged,
       ),
     );
@@ -433,6 +440,7 @@ class _AppearanceSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return _SheetShell(
       title: 'Appearance',
       child: BlocBuilder<SettingsBloc, SettingsState>(
@@ -454,16 +462,11 @@ class _AppearanceSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: selected
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.outline,
+                        color: selected ? cs.primary : cs.outline,
                         width: selected ? 2 : 1,
                       ),
                       color: selected
-                          ? Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.05)
+                          ? cs.primary.withOpacity(0.05)
                           : null,
                     ),
                     child: Row(children: [
@@ -472,15 +475,15 @@ class _AppearanceSheet extends StatelessWidget {
                         height: 36,
                         decoration: BoxDecoration(
                             color: (selected
-                                    ? Theme.of(context).colorScheme.primary
-                                    : PaypactColors.textSecondary)
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant)
                                 .withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8)),
                         child: Icon(_icon(mode),
                             size: 18,
                             color: selected
-                                ? Theme.of(context).colorScheme.primary
-                                : PaypactColors.textSecondary),
+                                ? cs.primary
+                                : cs.onSurfaceVariant),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -492,20 +495,19 @@ class _AppearanceSheet extends StatelessWidget {
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                     color: selected
-                                        ? Theme.of(context).colorScheme.primary
-                                        : PaypactColors.textPrimary)),
+                                        ? cs.primary
+                                        : cs.onSurface)),
                             const SizedBox(height: 2),
                             Text(_description(mode),
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 12,
-                                    color: PaypactColors.textSecondary)),
+                                    color: cs.onSurfaceVariant)),
                           ],
                         ),
                       ),
                       if (selected)
                         Icon(Icons.check_circle,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: 20),
+                            color: cs.primary, size: 20),
                     ]),
                   ),
                 ),
@@ -583,14 +585,18 @@ class _CurrencyLanguageSheet extends StatelessWidget {
                             width: 36,
                             height: 4,
                             decoration: BoxDecoration(
-                                color: Colors.grey[300],
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant,
                                 borderRadius: BorderRadius.circular(2)),
                           ),
                         ),
                         const SizedBox(height: 18),
-                        const Text('Currency & Language',
+                        Text('Currency & Language',
                             style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w700)),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.onSurface)),
                         const SizedBox(height: 24),
                         // ── Currency section ──────────────────────────
                         _SectionLabel('Currency'),
@@ -615,7 +621,7 @@ class _CurrencyLanguageSheet extends StatelessWidget {
                                       ? Theme.of(context).colorScheme.primary
                                       : Theme.of(context)
                                           .colorScheme
-                                          .onPrimary)),
+                                          .onSurface)),
                           title: name,
                           subtitle: code,
                           selected: selected,
@@ -669,10 +675,10 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: PaypactColors.textSecondary,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
             letterSpacing: 0.8),
       );
 }
@@ -693,6 +699,7 @@ class _SelectTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -702,13 +709,11 @@ class _SelectTile extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.outline,
+            color: selected ? cs.primary : cs.outline,
             width: selected ? 2 : 1,
           ),
           color: selected
-              ? Theme.of(context).colorScheme.primary.withOpacity(0.05)
+              ? cs.primary.withOpacity(0.05)
               : Theme.of(context).cardColor,
         ),
         child: Row(children: [
@@ -722,19 +727,16 @@ class _SelectTile extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: selected
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.onPrimary)),
+                        color: selected ? cs.primary : cs.onSurface)),
                 if (subtitle != null)
                   Text(subtitle!,
-                      style: const TextStyle(
-                          fontSize: 12, color: PaypactColors.textSecondary)),
+                      style: TextStyle(
+                          fontSize: 12, color: cs.onSurfaceVariant)),
               ],
             ),
           ),
           if (selected)
-            Icon(Icons.check_circle,
-                color: Theme.of(context).colorScheme.primary, size: 18),
+            Icon(Icons.check_circle, color: cs.primary, size: 18),
         ]),
       ),
     );

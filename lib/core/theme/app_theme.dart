@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'paypact_theme_extension.dart';
+
 class PaypactColors {
   // Brand
   static const primary = Color(0xFF4F46E5); // Indigo 600
@@ -44,6 +46,7 @@ class AppTheme {
           onError: Colors.white,
           surface: PaypactColors.surface,
           onSurface: PaypactColors.textPrimary,
+          onSurfaceVariant: PaypactColors.textSecondary,
           outline: PaypactColors.divider,
         ),
         appBarTheme: const AppBarTheme(
@@ -178,8 +181,7 @@ class AppTheme {
             backgroundColor: Colors.white,
             foregroundColor: PaypactColors.textSecondary,
             selectedForegroundColor: PaypactColors.primary,
-            selectedBackgroundColor:
-                PaypactColors.primary.withValues(alpha: 0.1),
+            selectedBackgroundColor: PaypactColors.primary.withOpacity(0.1),
             side: const BorderSide(color: PaypactColors.divider),
             textStyle: const TextStyle(fontFamily: 'Inter', fontSize: 13),
           ),
@@ -240,6 +242,7 @@ class AppTheme {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           behavior: SnackBarBehavior.floating,
         ),
+        extensions: const [PaypactThemeExtension.light],
       );
 
   // ── Dark ───────────────────────────────────────────────────────────────────
@@ -248,17 +251,36 @@ class AppTheme {
         brightness: Brightness.dark,
         fontFamily: 'Inter',
         scaffoldBackgroundColor: PaypactColors.darkBg,
-        colorScheme: const ColorScheme(
-          brightness: Brightness.dark,
+
+        // Use ColorScheme.dark() so every unspecified role gets a sensible
+        // dark-mode default. The low-level ColorScheme() constructor leaves
+        // missing roles as opaque black, making text invisible in Material 3
+        // widgets that read surfaceContainer, onSurfaceVariant, etc.
+        colorScheme: ColorScheme.dark(
           primary: PaypactColors.primaryLight,
           onPrimary: Colors.white,
+          primaryContainer: PaypactColors.primaryDark,
+          onPrimaryContainer: PaypactColors.darkTextPrimary,
           secondary: PaypactColors.secondary,
           onSecondary: Colors.white,
+          secondaryContainer: const Color(0xFF065F46), // Emerald 900
+          onSecondaryContainer: const Color(0xFFD1FAE5), // Emerald 100
           error: PaypactColors.danger,
           onError: Colors.white,
           surface: PaypactColors.darkBg,
           onSurface: PaypactColors.darkTextPrimary,
+          onSurfaceVariant: PaypactColors.darkTextSecondary,
           outline: PaypactColors.darkDivider,
+          outlineVariant: const Color(0xFF1E293B),
+          surfaceContainerHighest: PaypactColors.darkCard,
+          surfaceContainerHigh: PaypactColors.darkSurface,
+          surfaceContainer: PaypactColors.darkSurface,
+          surfaceContainerLow: PaypactColors.darkBg,
+          surfaceContainerLowest: PaypactColors.darkBg,
+          inverseSurface: PaypactColors.darkTextPrimary,
+          onInverseSurface: PaypactColors.darkBg,
+          inversePrimary: PaypactColors.primary,
+          scrim: Colors.black,
         ),
         appBarTheme: const AppBarTheme(
           backgroundColor: PaypactColors.darkSurface,
@@ -332,6 +354,10 @@ class AppTheme {
               color: PaypactColors.darkTextSecondary, fontFamily: 'Inter'),
           labelStyle: const TextStyle(
               color: PaypactColors.darkTextSecondary, fontFamily: 'Inter'),
+          floatingLabelStyle: const TextStyle(
+              color: PaypactColors.primaryLight, fontFamily: 'Inter'),
+          prefixIconColor: PaypactColors.darkTextSecondary,
+          suffixIconColor: PaypactColors.darkTextSecondary,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: PaypactColors.darkDivider),
@@ -395,7 +421,7 @@ class AppTheme {
             foregroundColor: PaypactColors.darkTextSecondary,
             selectedForegroundColor: PaypactColors.primaryLight,
             selectedBackgroundColor:
-                PaypactColors.primaryLight.withValues(alpha: 0.15),
+                PaypactColors.primaryLight.withOpacity(0.15),
             side: const BorderSide(color: PaypactColors.darkDivider),
             textStyle: const TextStyle(fontFamily: 'Inter', fontSize: 13),
           ),
@@ -456,9 +482,22 @@ class AppTheme {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           behavior: SnackBarBehavior.floating,
         ),
-        dropdownMenuTheme: const DropdownMenuThemeData(
-          textStyle: TextStyle(
+        dropdownMenuTheme: DropdownMenuThemeData(
+          textStyle: const TextStyle(
               color: PaypactColors.darkTextPrimary, fontFamily: 'Inter'),
+          menuStyle: MenuStyle(
+            backgroundColor: WidgetStatePropertyAll(PaypactColors.darkCard),
+            surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+            side: WidgetStatePropertyAll(
+              BorderSide(color: PaypactColors.darkDivider),
+            ),
+            shape: const WidgetStatePropertyAll(
+              RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+              ),
+            ),
+          ),
         ),
+        extensions: const [PaypactThemeExtension.dark],
       );
 }
