@@ -119,7 +119,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: PaypactColors.primary.withOpacity(0.08),
+                color: PaypactColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(children: [
@@ -181,6 +181,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
       ),
     ).then((confirmed) {
       if (confirmed == true) {
+        if (!mounted) return;
         context.read<GroupBloc>().add(
               GroupJoinRequested(inviteCode: code, user: user),
             );
@@ -292,7 +293,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                   colors: [
-                    Colors.black.withOpacity(0.85),
+                    Colors.black.withValues(alpha: 0.85),
                     Colors.transparent,
                   ],
                 ),
@@ -471,7 +472,7 @@ class _OverlayPainter extends CustomPainter {
     );
 
     // Dim everything outside the window
-    final dimPaint = Paint()..color = Colors.black.withOpacity(0.6);
+    final dimPaint = Paint()..color = Colors.black.withValues(alpha: 0.6);
     final full = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
     final hole = Path()..addRRect(window);
     canvas.drawPath(
@@ -498,7 +499,7 @@ class _OverlayPainter extends CustomPainter {
       ..shader = LinearGradient(
         colors: [
           Colors.transparent,
-          PaypactColors.primary.withOpacity(0.6),
+          PaypactColors.primary.withValues(alpha: 0.6),
           Colors.transparent,
         ],
       ).createShader(Rect.fromLTWH(left, top, _windowSize, 2));

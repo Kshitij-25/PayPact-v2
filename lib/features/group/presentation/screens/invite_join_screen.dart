@@ -120,7 +120,7 @@ class _InviteJoinScreenState extends State<InviteJoinScreen> {
                       color: Theme.of(context)
                           .colorScheme
                           .primary
-                          .withOpacity(0.3),
+                          .withValues(alpha: 0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -158,13 +158,15 @@ class _InviteJoinScreenState extends State<InviteJoinScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                   decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.primary.withOpacity(0.07),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.07),
                     border: Border.all(
                         color: Theme.of(context)
                             .colorScheme
                             .primary
-                            .withOpacity(0.2)),
+                            .withValues(alpha: 0.2)),
                     borderRadius: BorderRadius.circular(40),
                   ),
                   child: Row(
@@ -246,7 +248,8 @@ class _InviteJoinScreenState extends State<InviteJoinScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.error.withOpacity(0.07),
+              color:
+                  Theme.of(context).colorScheme.error.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -270,16 +273,12 @@ class _InviteJoinScreenState extends State<InviteJoinScreen> {
           ),
         ]);
       case _IdlePhase():
-        // TODO: Handle this case.
         throw UnimplementedError();
       case _JoiningPhase():
-        // TODO: Handle this case.
         throw UnimplementedError();
       case _SuccessPhase():
-        // TODO: Handle this case.
         throw UnimplementedError();
       case _ErrorPhase():
-        // TODO: Handle this case.
         throw UnimplementedError();
     }
   }

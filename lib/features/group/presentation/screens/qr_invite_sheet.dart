@@ -60,7 +60,7 @@ class QrInviteSheet extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.3),
+              color: Colors.grey.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -87,7 +87,7 @@ class QrInviteSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
+                  color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
                   blurRadius: 20,
                   offset: const Offset(0, 4),
                 ),
@@ -120,10 +120,10 @@ class QrInviteSheet extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: PaypactColors.primary.withOpacity(0.08),
+                    color: PaypactColors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(
-                        color: PaypactColors.primary.withOpacity(0.2)),
+                        color: PaypactColors.primary.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -186,10 +186,13 @@ class QrInviteSheet extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => Share.share(
-                    'Join my group "$groupName" on Paypact!\n\n'
-                    'Tap the link or enter code $inviteCode:\n$inviteLink',
-                  ),
+                  onPressed: () => SharePlus.instance.share(ShareParams(
+                      title: 'Join my group "$groupName" on Paypact!',
+                      text: inviteLink)),
+                  // onPressed: () => Share.share(
+                  //   'Join my group "$groupName" on Paypact!\n\n'
+                  //   'Tap the link or enter code $inviteCode:\n$inviteLink',
+                  // ),
                   icon: const Icon(Icons.share_rounded, size: 18),
                   label: const Text('Share'),
                   style: ElevatedButton.styleFrom(

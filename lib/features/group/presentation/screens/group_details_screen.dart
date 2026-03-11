@@ -130,7 +130,10 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
   void _shareInviteLink(BuildContext ctx) {
     ctx.read<GroupBloc>().add(GroupInviteLinkRequested(widget.groupId));
     final link = ctx.read<GroupBloc>().state.inviteLink;
-    if (link != null) Share.share('Join my group on Paypact: $link');
+    if (link != null) {
+      SharePlus.instance
+          .share(ShareParams(title: 'Join my group on Paypact:', text: link));
+    }
   }
 
   void _showAddMemberPicker(BuildContext ctx) {
@@ -343,7 +346,7 @@ class _StatCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
+                    color: iconColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8)),
                 child: Icon(icon, color: iconColor, size: 16),
               ),
@@ -702,7 +705,7 @@ class _SettlementTile extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-                color: cs.secondary.withOpacity(0.12),
+                color: cs.secondary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10)),
             child:
                 const Center(child: Text('🤝', style: TextStyle(fontSize: 20))),
@@ -725,7 +728,7 @@ class _SettlementTile extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                   decoration: BoxDecoration(
-                      color: cs.secondary.withOpacity(0.12),
+                      color: cs.secondary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(4)),
                   child: Text('Settlement',
                       style: TextStyle(
@@ -825,7 +828,7 @@ class _BalancesTab extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               leading: CircleAvatar(
-                  backgroundColor: c.withOpacity(0.1),
+                  backgroundColor: c.withValues(alpha: 0.1),
                   child: Text(m.displayName.substring(0, 1).toUpperCase(),
                       style: TextStyle(color: c, fontWeight: FontWeight.w600))),
               title: Text(m.displayName,
@@ -931,10 +934,10 @@ class _SettleUpTab extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withOpacity(0.1),
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: const Color(0xFFF59E0B).withOpacity(0.3))),
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.3))),
                 child: Row(children: [
                   const Icon(Icons.info_outline,
                       color: Color(0xFFF59E0B), size: 18),
@@ -1038,9 +1041,9 @@ class _ActionChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
+            color: color.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.25)),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
           ),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(icon, size: 18, color: color),
@@ -1264,8 +1267,8 @@ class _FoundUserCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: cs.primary.withOpacity(0.05),
-        border: Border.all(color: cs.primary.withOpacity(0.2)),
+        color: cs.primary.withValues(alpha: 0.05),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(children: [
@@ -1437,9 +1440,9 @@ class _AddMemberPickerSheet extends StatelessWidget {
                 if (!context.mounted) return;
                 final link = groupBloc.state.inviteLink;
                 if (link != null) {
-                  Share.share(
-                    'Join my group "$groupName" on Paypact!\n\n$link',
-                  );
+                  SharePlus.instance.share(ShareParams(
+                      title: 'Join my group "$groupName" on Paypact!',
+                      text: link));
                 }
               });
             },
@@ -1486,7 +1489,7 @@ class _OptionTile extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: iconColor, size: 22),

@@ -86,9 +86,8 @@ class ProfileScreen extends StatelessWidget {
                   builder: (_, s) => Text(_themeName(s.themeMode),
                       style: TextStyle(
                           fontSize: 13,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant)),
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
                 ),
                 onTap: () => _showSheet(context, _AppearanceSheet()),
               ),
@@ -139,7 +138,8 @@ class ProfileScreen extends StatelessWidget {
                 title: 'Sign Out',
                 titleColor: Theme.of(context).colorScheme.error,
                 showChevron: false,
-                onTap: () => context.read<AuthBloc>().add(AuthSignOutRequested()),
+                onTap: () =>
+                    context.read<AuthBloc>().add(AuthSignOutRequested()),
               ),
             ]),
             const SizedBox(height: 40),
@@ -249,7 +249,7 @@ class _SettingsTile extends StatelessWidget {
         width: 34,
         height: 34,
         decoration: BoxDecoration(
-            color: iconColor.withOpacity(0.1),
+            color: iconColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8)),
         child: Icon(icon, color: iconColor, size: 18),
       ),
@@ -394,17 +394,15 @@ class _NotifyTile extends StatelessWidget {
           height: 36,
           decoration: BoxDecoration(
               color: (value ? cs.primary : cs.onSurfaceVariant)
-                  .withOpacity(0.1),
+                  .withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8)),
           child: Icon(icon,
-              size: 18,
-              color: value ? cs.primary : cs.onSurfaceVariant),
+              size: 18, color: value ? cs.primary : cs.onSurfaceVariant),
         ),
         title: Text(title,
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         subtitle: Text(subtitle,
-            style: TextStyle(
-                fontSize: 12, color: cs.onSurfaceVariant)),
+            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
         value: value,
         activeThumbColor: cs.primary,
         onChanged: onChanged,
@@ -465,25 +463,20 @@ class _AppearanceSheet extends StatelessWidget {
                         color: selected ? cs.primary : cs.outline,
                         width: selected ? 2 : 1,
                       ),
-                      color: selected
-                          ? cs.primary.withOpacity(0.05)
-                          : null,
+                      color:
+                          selected ? cs.primary.withValues(alpha: 0.05) : null,
                     ),
                     child: Row(children: [
                       Container(
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                            color: (selected
-                                    ? cs.primary
-                                    : cs.onSurfaceVariant)
-                                .withOpacity(0.1),
+                            color: (selected ? cs.primary : cs.onSurfaceVariant)
+                                .withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8)),
                         child: Icon(_icon(mode),
                             size: 18,
-                            color: selected
-                                ? cs.primary
-                                : cs.onSurfaceVariant),
+                            color: selected ? cs.primary : cs.onSurfaceVariant),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -494,20 +487,17 @@ class _AppearanceSheet extends StatelessWidget {
                                 style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: selected
-                                        ? cs.primary
-                                        : cs.onSurface)),
+                                    color:
+                                        selected ? cs.primary : cs.onSurface)),
                             const SizedBox(height: 2),
                             Text(_description(mode),
                                 style: TextStyle(
-                                    fontSize: 12,
-                                    color: cs.onSurfaceVariant)),
+                                    fontSize: 12, color: cs.onSurfaceVariant)),
                           ],
                         ),
                       ),
                       if (selected)
-                        Icon(Icons.check_circle,
-                            color: cs.primary, size: 20),
+                        Icon(Icons.check_circle, color: cs.primary, size: 20),
                     ]),
                   ),
                 ),
@@ -596,7 +586,8 @@ class _CurrencyLanguageSheet extends StatelessWidget {
                             style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
-                                color: Theme.of(context).colorScheme.onSurface)),
+                                color:
+                                    Theme.of(context).colorScheme.onSurface)),
                         const SizedBox(height: 24),
                         // ── Currency section ──────────────────────────
                         _SectionLabel('Currency'),
@@ -713,7 +704,7 @@ class _SelectTile extends StatelessWidget {
             width: selected ? 2 : 1,
           ),
           color: selected
-              ? cs.primary.withOpacity(0.05)
+              ? cs.primary.withValues(alpha: 0.05)
               : Theme.of(context).cardColor,
         ),
         child: Row(children: [
@@ -730,13 +721,12 @@ class _SelectTile extends StatelessWidget {
                         color: selected ? cs.primary : cs.onSurface)),
                 if (subtitle != null)
                   Text(subtitle!,
-                      style: TextStyle(
-                          fontSize: 12, color: cs.onSurfaceVariant)),
+                      style:
+                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
               ],
             ),
           ),
-          if (selected)
-            Icon(Icons.check_circle, color: cs.primary, size: 18),
+          if (selected) Icon(Icons.check_circle, color: cs.primary, size: 18),
         ]),
       ),
     );

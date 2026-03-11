@@ -30,8 +30,10 @@ class CategoryChips extends StatelessWidget {
               child: ChoiceChip(
                 label: Text(_label(cat)),
                 selected: sel,
-                selectedColor:
-                    Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                selectedColor: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.15),
                 labelStyle: TextStyle(
                     color: sel ? Theme.of(context).colorScheme.primary : null,
                     fontWeight: sel ? FontWeight.w600 : FontWeight.normal),

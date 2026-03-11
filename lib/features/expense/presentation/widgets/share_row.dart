@@ -91,8 +91,8 @@ class _StepBtn extends StatelessWidget {
           height: 28,
           decoration: BoxDecoration(
               color: enabled
-                  ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
-                  : Colors.grey.withOpacity(0.1),
+                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                  : Colors.grey.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6)),
           child: Icon(icon,
               size: 16,

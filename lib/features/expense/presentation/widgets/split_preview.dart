@@ -21,9 +21,12 @@ class SplitPreview extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.04),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.04),
           border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.15)),
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: 0.15)),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(

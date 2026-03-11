@@ -236,11 +236,10 @@ class GroupSettingsScreen extends StatelessWidget {
     }
 
     final link = 'https://paypact-fec8e.web.app/invite/$code';
-    Share.share(
-      'Join my group "${group.name}" on Paypact!\n\n'
-      'Tap the link to join:\n$link\n\n'
-      'Or enter invite code: $code',
-    );
+    SharePlus.instance.share(ShareParams(
+        title: 'Join my group "${group.name}" on Paypact!',
+        text:
+            'Tap the link to join:\n$link\n\n' 'or enter invite code: $code'));
   }
 
   void _confirmLeave(
@@ -257,7 +256,7 @@ class GroupSettingsScreen extends StatelessWidget {
               'You are the only admin. Assign another admin before leaving.'),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(_), child: const Text('OK')),
+                onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
           ],
         ),
       );
@@ -446,8 +445,10 @@ class _MembersCard extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               leading: CircleAvatar(
                 radius: 20,
-                backgroundColor:
-                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.1),
                 backgroundImage:
                     m.photoUrl != null ? NetworkImage(m.photoUrl!) : null,
                 child: m.photoUrl == null
@@ -538,7 +539,7 @@ class _Chip extends StatelessWidget {
         margin: const EdgeInsets.only(left: 5),
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
         decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(4)),
         child: Text(text,
             style: TextStyle(
@@ -616,7 +617,7 @@ class _SettingsTile extends StatelessWidget {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8)),
           child: Icon(icon, color: iconColor, size: 18),
         ),
@@ -725,8 +726,10 @@ class _EditGroupSheetState extends State<_EditGroupSheet> {
                 return ChoiceChip(
                   label: Text(_catLabel(cat)),
                   selected: sel,
-                  selectedColor:
-                      Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                  selectedColor: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.15),
                   labelStyle: TextStyle(
                       color: sel ? Theme.of(context).colorScheme.primary : null,
                       fontWeight: sel ? FontWeight.w600 : FontWeight.normal),
@@ -841,7 +844,7 @@ class _CurrencySheet extends StatelessWidget {
                           ? Theme.of(context)
                               .colorScheme
                               .primary
-                              .withOpacity(0.05)
+                              .withValues(alpha: 0.05)
                           : Theme.of(context).cardColor,
                     ),
                     child: Row(children: [
@@ -1063,9 +1066,13 @@ class _FoundUserCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+            color:
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
             border: Border.all(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.2)),
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.2)),
             borderRadius: BorderRadius.circular(14)),
         child: Row(children: [
           CircleAvatar(
