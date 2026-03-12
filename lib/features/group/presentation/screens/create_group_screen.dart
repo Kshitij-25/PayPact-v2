@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/core/theme/paypact_theme_extension.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/use_cases/create_group_use_case.dart';
 import 'package:paypact/features/group/presentation/bloc/group_bloc.dart';
+import 'package:paypact/features/profile/presentation/bloc/settings_bloc.dart';
 
 class CreateGroupScreen extends StatefulWidget {
   const CreateGroupScreen({super.key});
@@ -18,10 +20,40 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   GroupCategory _selectedCategory = GroupCategory.other;
-  String _currency = 'USD';
+  late String _currency;
 
-  static const _currencies = ['USD', 'EUR', 'GBP', 'INR', 'JPY', 'AUD', 'CAD'];
+  static const _currencies = [
+    'USD',
+    'EUR',
+    'GBP',
+    'INR',
+    'JPY',
+    'AUD',
+    'CAD',
+    'CHF',
+    'CNY',
+    'SGD',
+    'HKD',
+    'MXN',
+    'BRL',
+    'KRW',
+    'SEK',
+    'NOK',
+    'DKK',
+    'NZD',
+    'ZAR',
+    'AED',
+  ];
   static const _categories = GroupCategory.values;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill with the user's saved currency preference
+    _currency = context.read<SettingsBloc>().state.currency;
+    // Ensure it's in our list; fall back to USD if it somehow isn't
+    if (!_currencies.contains(_currency)) _currency = 'USD';
+  }
 
   @override
   void dispose() {
@@ -54,70 +86,69 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('New Group')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            _SectionLabel('Group Name'),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _nameController,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                hintText: 'e.g. Weekend Trip, Roommates...',
+      body: ResponsiveCenter(
+        maxWidth: 640,
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              _SectionLabel('Group Name'),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _nameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  hintText: 'e.g. Weekend Trip, Roommates...',
+                ),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Name is required' : null,
               ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Name is required' : null,
-            ),
-            const SizedBox(height: 24),
-            _SectionLabel('Category'),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _categories.map((cat) {
-                final isSelected = cat == _selectedCategory;
-                return ChoiceChip(
-                  label: Text(_categoryLabel(cat)),
-                  selected: isSelected,
-                  selectedColor: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.15),
-                  labelStyle: TextStyle(
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : PaypactColors.textSecondary,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                  side: BorderSide(
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.outline,
-                  ),
-                  onSelected: (_) => setState(() => _selectedCategory = cat),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-            _SectionLabel('Currency'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: _currency,
-              decoration: const InputDecoration(),
-              items: _currencies
-                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                  .toList(),
-              onChanged: (v) => setState(() => _currency = v ?? 'USD'),
-            ),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: _submit,
-              child: const Text('Create Group'),
-            ),
-          ],
+              const SizedBox(height: 24),
+              _SectionLabel('Category'),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _categories.map((cat) {
+                  final isSelected = cat == _selectedCategory;
+                  return ChoiceChip(
+                    label: Text(_categoryLabel(cat)),
+                    selected: isSelected,
+                    selectedColor: context.pt.primary.withOpacity(0.15),
+                    labelStyle: TextStyle(
+                      color: isSelected
+                          ? context.pt.primary
+                          : context.pt.textSecondary,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                    side: BorderSide(
+                      color:
+                          isSelected ? context.pt.primary : context.pt.divider,
+                    ),
+                    onSelected: (_) => setState(() => _selectedCategory = cat),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+              _SectionLabel('Currency'),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: _currency,
+                decoration: const InputDecoration(),
+                items: _currencies
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setState(() => _currency = v ?? 'USD'),
+              ),
+              const SizedBox(height: 40),
+              ElevatedButton(
+                onPressed: _submit,
+                child: const Text('Create Group'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -146,7 +177,7 @@ class _SectionLabel extends StatelessWidget {
       style: TextStyle(
         fontWeight: FontWeight.w600,
         fontSize: 14,
-        color: Theme.of(context).colorScheme.onSurface,
+        color: context.pt.textPrimary,
       ),
     );
   }
