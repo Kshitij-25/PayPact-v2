@@ -11,10 +11,13 @@ import 'package:paypact/features/expense/presentation/bloc/expense_bloc.dart';
 import 'package:paypact/features/group/presentation/bloc/group_bloc.dart';
 import 'package:paypact/features/notification/presentation/bloc/notification_bloc.dart';
 import 'package:paypact/features/profile/presentation/bloc/settings_bloc.dart';
+import 'package:paypact/firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   await initializeDependencies();
 
   // Initialize local notifications (creates Android channel, requests iOS permission)

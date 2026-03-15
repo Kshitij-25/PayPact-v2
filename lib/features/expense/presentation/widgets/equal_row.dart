@@ -37,7 +37,7 @@ class EqualRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 14,
                   color: checked
-                      ? Theme.of(context).colorScheme.onPrimary
+                      ? Theme.of(context).colorScheme.onSurface
                       : PaypactColors.textSecondary,
                 ),
               ),

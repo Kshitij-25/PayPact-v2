@@ -24,7 +24,6 @@
 	<string>????</string>
 	<key>CFBundleURLTypes</key>
 	<array>
-		<!-- Google Sign In -->
 		<dict>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
@@ -35,8 +34,6 @@
 				<string>com.googleusercontent.apps.531387933797-fv558vapve1tpej0v86hiqbcm2sg9536</string>
 			</array>
 		</dict>
-
-		<!-- Paypact deep link -->
 		<dict>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
@@ -95,8 +92,8 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>com.apple.developer.associated-domains</key>
-    <array>
-        <string>applinks:paypact-fec8e.web.app</string>
-    </array>
+	<array>
+		<string>applinks:paypact-fec8e.web.app</string>
+	</array>
 </dict>
 </plist>

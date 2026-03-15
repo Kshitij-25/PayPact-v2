@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:paypact/core/theme/app_theme.dart';
+import 'package:paypact/core/theme/paypact_theme_extension.dart';
 import 'package:paypact/core/utils/currency_formatter.dart';
 import 'package:paypact/features/auth/domain/entities/user_entity.dart';
 import 'package:paypact/features/auth/presentation/bloc/auth_bloc.dart';
@@ -226,11 +226,15 @@ class _OverviewTab extends StatelessWidget {
         final currentUserId = ctx.read<AuthBloc>().state.user?.id ?? '';
         final myMember = group.getMember(currentUserId);
         final myBalance = myMember?.balance ?? 0.0;
+        final mySpent = expState.expenses.fold<double>(
+          0.0,
+          (sum, e) => sum + (e.paidBy[currentUserId] ?? 0.0),
+        );
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
           children: [
-            _StatsRow(group: group, myBalance: myBalance),
+            _StatsRow(group: group, myBalance: myBalance, mySpent: mySpent),
             const SizedBox(height: 24),
             if (expState.expenses.isNotEmpty) ...[
               _SectionLabel('Spending by Category'),
@@ -271,54 +275,88 @@ class _SectionLabel extends StatelessWidget {
 // ── Stats row ─────────────────────────────────────────────────────────────────
 
 class _StatsRow extends StatelessWidget {
-  const _StatsRow({required this.group, required this.myBalance});
+  const _StatsRow({
+    required this.group,
+    required this.myBalance,
+    required this.mySpent,
+  });
   final GroupEntity group;
   final double myBalance;
+  final double mySpent;
 
   @override
   Widget build(BuildContext context) {
     final c = group.currency;
-    final cs = Theme.of(context).colorScheme;
     final Color balColor = myBalance > 0
-        ? cs.secondary
+        ? context.pt.secondary
         : myBalance < 0
-            ? cs.error
-            : cs.onSurfaceVariant;
+            ? context.pt.danger
+            : context.pt.textSecondary;
     final String balLabel = myBalance > 0
         ? 'you get back'
         : myBalance < 0
             ? 'you owe'
             : 'all settled';
 
-    return Row(children: [
-      Expanded(
-        child: _StatCard(
-          icon: Icons.receipt_long_outlined,
-          iconColor: cs.primary,
-          label: 'Total Spent',
-          value: CurrencyFormatter.format(group.totalExpenses, c),
-        ),
+    // On wide screens (tablet/desktop) all 4 fit in a row.
+    // On mobile they wrap into a 2×2 grid.
+    final cards = [
+      _StatCard(
+        icon: Icons.receipt_long_outlined,
+        iconColor: context.pt.primary,
+        label: 'Group Total',
+        value: CurrencyFormatter.format(group.totalExpenses, c),
       ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: _StatCard(
-          icon: Icons.people_outline,
-          iconColor: PaypactColors.warning,
-          label: 'Members',
-          value: '${group.memberCount}',
-        ),
+      _StatCard(
+        icon: Icons.person_outline,
+        iconColor: context.pt.primaryLight,
+        label: 'You Paid',
+        value: CurrencyFormatter.format(mySpent, c),
+        valueColor: mySpent > 0 ? context.pt.primary : null,
       ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: _StatCard(
-          icon: myBalance >= 0 ? Icons.arrow_downward : Icons.arrow_upward,
-          iconColor: balColor,
-          label: balLabel,
-          value: CurrencyFormatter.format(myBalance.abs(), c),
-          valueColor: balColor,
-        ),
+      _StatCard(
+        icon: Icons.people_outline,
+        iconColor: context.pt.warning,
+        label: 'Members',
+        value: '${group.memberCount}',
       ),
-    ]);
+      _StatCard(
+        icon: myBalance >= 0 ? Icons.arrow_downward : Icons.arrow_upward,
+        iconColor: balColor,
+        label: balLabel,
+        value: CurrencyFormatter.format(myBalance.abs(), c),
+        valueColor: balColor,
+      ),
+    ];
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final isWide = constraints.maxWidth > 500;
+      if (isWide) {
+        // Single row on tablet/desktop
+        return Row(
+          children: [
+            for (int i = 0; i < cards.length; i++) ...[
+              Expanded(child: cards[i]),
+              if (i < cards.length - 1) const SizedBox(width: 10),
+            ],
+          ],
+        );
+      }
+      // 2×2 grid on mobile
+      return Column(children: [
+        Row(children: [
+          Expanded(child: cards[0]),
+          const SizedBox(width: 10),
+          Expanded(child: cards[1]),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: cards[2]),
+          const SizedBox(width: 10),
+          Expanded(child: cards[3]),
+        ]),
+      ]);
+    });
   }
 }
 
@@ -346,22 +384,20 @@ class _StatCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
+                    color: iconColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8)),
                 child: Icon(icon, color: iconColor, size: 16),
               ),
               const SizedBox(height: 8),
               Text(label,
-                  style: TextStyle(
-                      fontSize: 10,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  style:
+                      TextStyle(fontSize: 10, color: context.pt.textSecondary)),
               const SizedBox(height: 2),
               Text(value,
                   style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
-                      color: valueColor ??
-                          Theme.of(context).colorScheme.onSurface),
+                      color: valueColor ?? context.pt.textPrimary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
             ],
