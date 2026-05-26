@@ -1,372 +1,310 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
-import 'package:paypact/core/utils/currency_formatter.dart';
-import 'package:paypact/core/utils/responsive.dart';
-import 'package:paypact/features/auth/presentation/bloc/auth_bloc.dart';
-import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
-import 'package:paypact/features/expense/domain/entities/settlement_entity.dart';
-import 'package:paypact/features/expense/presentation/bloc/expense_bloc.dart';
-import 'package:paypact/features/group/presentation/bloc/group_bloc.dart';
-import 'package:paypact/features/group/presentation/widgets/group_card.dart';
-import 'package:paypact/widgets/empty_states.dart';
-import 'package:paypact/widgets/shimmer_loader.dart';
+import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/navigation/app_router.dart';
+import 'package:paypact/design_system/components/paypact_bottom_nav.dart';
+import 'package:paypact/design_system/components/paypact_button.dart';
+import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
+import 'package:paypact/design_system/tokens/radius.dart';
+import 'package:paypact/design_system/tokens/spacing.dart';
+import 'package:paypact/design_system/tokens/typography.dart';
+import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
+import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/group/domain/entities/group_entity.dart';
+import 'package:paypact/features/group/domain/repositories/group_repository.dart';
+import 'package:paypact/features/group/presentation/cubit/groups_cubit.dart';
+import 'package:paypact/widgets/pp_atoms.dart';
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.pendingInviteCode});
-  final String? pendingInviteCode;
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 0;
-  List<String> _lastGroupIds = [];
-
-  @override
-  void initState() {
-    super.initState();
-    final userId = context.read<AuthBloc>().state.user?.id;
-    if (userId != null) {
-      context.read<GroupBloc>().add(GroupLoadRequested(userId));
-    }
-    if (widget.pendingInviteCode != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _handleInviteCode(widget.pendingInviteCode!);
-      });
-    }
-  }
-
-  void _handleInviteCode(String code) {
-    final user = context.read<AuthBloc>().state.user;
-    if (user == null) return;
-    context.read<GroupBloc>().add(GroupJoinRequested(
-          inviteCode: code,
-          user: user,
-        ));
-  }
-
-  void _maybeRefreshActivity(List<String> groupIds) {
-    if (groupIds.isEmpty || groupIds == _lastGroupIds) return;
-    _lastGroupIds = groupIds;
-    context.read<ExpenseBloc>().add(ActivityLoadRequested(groupIds));
-  }
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final isWide = Responsive.isWide(context);
+    final authState = context.watch<AuthCubit>().state;
+    final userId =
+        authState is AuthAuthenticated ? authState.user.id : '';
 
-    return BlocListener<GroupBloc, GroupState>(
-      listenWhen: (prev, curr) => prev.groups != curr.groups,
-      listener: (_, state) {
-        _maybeRefreshActivity(state.groups.map((g) => g.id).toList());
-      },
-      child: AdaptiveScaffold(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-        destinations: const [
-          AdaptiveDestination(
-            icon: Icon(Icons.group_outlined),
-            selectedIcon: Icon(Icons.group),
-            label: 'Groups',
-          ),
-          AdaptiveDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Activity',
+    return BlocProvider(
+      create: (_) => GroupsCubit(
+        locator<GroupRepository>(),
+        locator<ExpenseRepository>(),
+        userId,
+      )..loadGroups(),
+      child: const _HomeBody(),
+    );
+  }
+}
+
+class _HomeBody extends StatelessWidget {
+  const _HomeBody();
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    final authState = context.watch<AuthCubit>().state;
+    final userName = authState is AuthAuthenticated
+        ? authState.user.name
+        : 'there';
+    final firstName = userName.split(' ').first;
+
+    return Scaffold(
+      backgroundColor: pt.bg,
+      bottomNavigationBar: PayPactBottomNav(
+        currentIndex: 0,
+        onTap: (i) => [
+          () => context.go(AppRoutes.home),
+          () => context.go(AppRoutes.groups),
+          () => context.go(AppRoutes.activity),
+          () => context.go(AppRoutes.profile),
+        ][i](),
+        onFabTap: () => context.push('/group/create'),
+      ),
+      body: Stack(
+        children: [
+          const PpBackdropGlow(intensity: 0.12),
+          SafeArea(
+            child: BlocBuilder<GroupsCubit, GroupsState>(
+              builder: (context, state) {
+                final groups = state is GroupsLoaded ? state.groups : <GroupEntity>[];
+                final totalBalance =
+                    state is GroupsLoaded ? state.totalNetBalance : 0.0;
+                final loading = state is GroupsLoading;
+
+                return ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(PayPactSpacing.s6,
+                          PayPactSpacing.s2, PayPactSpacing.s6, PayPactSpacing.s4),
+                      child: Row(
+                        children: [
+                          PpAvatar(name: userName, size: 42),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Good morning,',
+                                  style: PayPactTypography.bodySm
+                                      .copyWith(color: pt.ink3)),
+                              Text(firstName,
+                                  style: PayPactTypography.headingMd
+                                      .copyWith(color: pt.ink)),
+                            ],
+                          ),
+                          const Spacer(),
+                          PpGlassIconButton(
+                              icon: Icons.notifications_none_rounded,
+                              onTap: () =>
+                                  context.push(AppRoutes.notifications),
+                              badge: false),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(PayPactSpacing.s7,
+                          PayPactSpacing.s5, PayPactSpacing.s7, PayPactSpacing.s6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('NET BALANCE',
+                              style: PayPactTypography.label
+                                  .copyWith(color: pt.ink3, letterSpacing: 1.6)),
+                          const SizedBox(height: 10),
+                          loading
+                              ? Container(
+                                  height: 64,
+                                  width: 180,
+                                  decoration: BoxDecoration(
+                                    color: pt.surface,
+                                    borderRadius: PayPactRadius.md,
+                                  ),
+                                )
+                              : Text(
+                                  PpAmount.format(totalBalance.round(),
+                                      signed: true),
+                                  style: PayPactTypography.amountHero.copyWith(
+                                      color: pt.ink,
+                                      fontSize: 64,
+                                      letterSpacing: -0.045 * 64),
+                                ),
+                          const SizedBox(height: 8),
+                          Text(
+                            groups.isEmpty
+                                ? 'No active groups yet'
+                                : '${groups.length} group${groups.length == 1 ? '' : 's'} · '
+                                    '${groups.where((g) => g.netBalance > 0).length} owing you',
+                            style: PayPactTypography.bodyMd
+                                .copyWith(color: pt.ink2),
+                          ),
+                          const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              PayPactButton(
+                                onPressed: groups.isEmpty
+                                    ? null
+                                    : () => context.push(
+                                        '/group/${groups.first.id}/settle'),
+                                label: 'Settle up',
+                                variant: PayPactButtonVariant.accent,
+                                leftIcon: Icons.handshake_rounded,
+                              ),
+                              const SizedBox(width: 10),
+                              PayPactButton(
+                                onPressed: () {},
+                                label: 'Insights',
+                                variant: PayPactButtonVariant.secondary,
+                                leftIcon: Icons.donut_small_rounded,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    PpSectionLabel(
+                      label: 'YOUR GROUPS · ${groups.length}',
+                      action: 'See all',
+                      onAction: () => context.go(AppRoutes.groups),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 160,
+                      child: loading
+                          ? const Center(
+                              child: CircularProgressIndicator())
+                          : ListView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: PayPactSpacing.s6),
+                              children: [
+                                for (final g in groups.take(5)) ...[
+                                  GestureDetector(
+                                    onTap: () =>
+                                        context.push('/group/${g.id}'),
+                                    child: _GroupTile(group: g),
+                                  ),
+                                  const SizedBox(width: 12),
+                                ],
+                                GestureDetector(
+                                  onTap: () =>
+                                      context.push('/group/create'),
+                                  child: _AddGroupTile(),
+                                ),
+                              ],
+                            ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                );
+              },
+            ),
           ),
         ],
-        appBar: AppBar(
-          title: const Text('Paypact'),
-          actions: [
-            if (!isWide)
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                onPressed: () {},
-              ),
-            GestureDetector(
-              onTap: () => context.push('/profile'),
-              child: Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: BlocBuilder<AuthBloc, AuthState>(
-                  builder: (_, state) => CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.4),
-                    backgroundImage: state.user?.photoUrl != null
-                        ? CachedNetworkImageProvider(state.user!.photoUrl!)
-                        : null,
-                    child: state.user?.photoUrl == null
-                        ? Text(
-                            state.user?.displayName
-                                    .substring(0, 1)
-                                    .toUpperCase() ??
-                                'U',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600),
-                          )
-                        : null,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        body: IndexedStack(
-          index: _selectedIndex,
-          children: const [
-            _GroupsTab(),
-            _ActivityTab(),
-          ],
-        ),
-        floatingActionButton: _selectedIndex == 0
-            ? FloatingActionButton.extended(
-                onPressed: () => context.push('/group/create'),
-                icon: const Icon(Icons.add),
-                label: const Text('New Group'),
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Colors.white,
-              )
-            : null,
       ),
     );
   }
 }
 
-class _GroupsTab extends StatelessWidget {
-  const _GroupsTab();
+class _GroupTile extends StatelessWidget {
+  const _GroupTile({required this.group});
+  final GroupEntity group;
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<GroupBloc, GroupState>(
-      builder: (context, state) {
-        if (state.status == GroupStatus.loading && state.groups.isEmpty) {
-          return const ShimmerLoader();
-        }
-        if (state.groups.isEmpty) {
-          return const EmptyState(
-            icon: Icons.group_outlined,
-            title: 'No groups yet',
-            subtitle: 'Create a group to start splitting expenses with friends',
-          );
-        }
-        return ListView.separated(
-          padding: EdgeInsets.fromLTRB(
-            Responsive.hPadding(context),
-            16,
-            Responsive.hPadding(context),
-            100,
-          ),
-          itemCount: state.groups.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, index) => GroupCard(
-            group: state.groups[index],
-            currentUserId: context.read<AuthBloc>().state.user?.id ?? '',
-            onTap: () => context.push(
-              '/group/${state.groups[index].id}',
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
+    final pt = context.pt;
+    final cat = _categoryFromString(group.category);
+    final tones = PpCategoryDisc.tone(context, cat);
 
-// ── Activity feed ──────────────────────────────────────────────────────────
-
-sealed class _ActivityItem {
-  DateTime get date;
-}
-
-class _ExpenseActivityItem extends _ActivityItem {
-  _ExpenseActivityItem(this.expense);
-  final ExpenseEntity expense;
-  @override
-  DateTime get date => expense.createdAt;
-}
-
-class _SettlementActivityItem extends _ActivityItem {
-  _SettlementActivityItem(this.settlement);
-  final SettlementEntity settlement;
-  @override
-  DateTime get date => settlement.createdAt;
-}
-
-class _ActivityTab extends StatelessWidget {
-  const _ActivityTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<ExpenseBloc, ExpenseState>(
-      buildWhen: (prev, curr) =>
-          prev.activityExpenses != curr.activityExpenses ||
-          prev.activitySettlements != curr.activitySettlements,
-      builder: (ctx, state) {
-        final feed = <_ActivityItem>[
-          ...state.activityExpenses.map(_ExpenseActivityItem.new),
-          ...state.activitySettlements.map(_SettlementActivityItem.new),
-        ]..sort((a, b) => b.date.compareTo(a.date));
-
-        if (feed.isEmpty) {
-          return const EmptyState(
-            icon: Icons.receipt_long_outlined,
-            title: 'No recent activity',
-            subtitle:
-                'Your expense activity across all groups will appear here',
-          );
-        }
-
-        final groups = ctx.read<GroupBloc>().state.groups;
-        final hPad = Responsive.hPadding(context);
-
-        return ListView.separated(
-          padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 32),
-          itemCount: feed.length,
-          separatorBuilder: (_, __) => const Divider(height: 1, indent: 64),
-          itemBuilder: (_, i) {
-            final item = feed[i];
-            if (item is _ExpenseActivityItem) {
-              final e = item.expense;
-              final groupName =
-                  groups.where((g) => g.id == e.groupId).firstOrNull?.name ??
-                      '';
-              return _ActivityTile(
-                emoji: _categoryEmoji(e.category),
-                emojiColor: Theme.of(context).colorScheme.primary,
-                title: e.title,
-                subtitle: groupName.isNotEmpty
-                    ? '$groupName · ${DateFormat('MMM d').format(e.createdAt)}'
-                    : DateFormat('MMM d').format(e.createdAt),
-                amount: CurrencyFormatter.format(e.amount, e.currency),
-                amountColor: Theme.of(context).colorScheme.onSurface,
-              );
-            } else {
-              final s = (item as _SettlementActivityItem).settlement;
-              final groupName =
-                  groups.where((g) => g.id == s.groupId).firstOrNull?.name ??
-                      '';
-              return _ActivityTile(
-                emoji: '🤝',
-                emojiColor: Theme.of(context).colorScheme.secondary,
-                title: 'Settlement',
-                subtitle: groupName.isNotEmpty
-                    ? '$groupName · ${DateFormat('MMM d').format(s.createdAt)}'
-                    : DateFormat('MMM d').format(s.createdAt),
-                amount: CurrencyFormatter.format(s.amount, s.currency),
-                amountColor: Theme.of(context).colorScheme.secondary,
-                badge: 'Settled',
-              );
-            }
-          },
-        );
-      },
-    );
-  }
-
-  String _categoryEmoji(ExpenseCategory cat) => switch (cat) {
-        ExpenseCategory.food => '🍕',
-        ExpenseCategory.transport => '🚗',
-        ExpenseCategory.accommodation => '🏨',
-        ExpenseCategory.entertainment => '🎬',
-        ExpenseCategory.shopping => '🛍️',
-        ExpenseCategory.utilities => '💡',
-        ExpenseCategory.health => '💊',
-        ExpenseCategory.education => '📚',
-        ExpenseCategory.other => '📦',
-      };
-}
-
-class _ActivityTile extends StatelessWidget {
-  const _ActivityTile({
-    required this.emoji,
-    required this.emojiColor,
-    required this.title,
-    required this.subtitle,
-    required this.amount,
-    required this.amountColor,
-    this.badge,
-  });
-
-  final String emoji;
-  final Color emojiColor;
-  final String title;
-  final String subtitle;
-  final String amount;
-  final Color amountColor;
-  final String? badge;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
+    return Container(
+      width: 140,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: pt.surface,
+        border: Border.all(color: pt.border),
+        borderRadius: PayPactRadius.lg,
+        boxShadow: pt.shadowSm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: emojiColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 20))),
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(color: tones[0], shape: BoxShape.circle),
+            alignment: Alignment.center,
+            child: Text(group.emoji, style: const TextStyle(fontSize: 18)),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w500, fontSize: 14)),
-                    if (badge != null) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .secondary
-                              .withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          badge!,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.secondary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 12,
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
+          const SizedBox(height: 14),
+          Text(group.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PayPactTypography.bodyMd
+                  .copyWith(color: pt.ink, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 2),
+          Text('${group.memberIds.length} members',
+              style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
+          const SizedBox(height: 10),
           Text(
-            amount,
-            style: TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 14, color: amountColor),
+            PpAmount.format(group.netBalance.round(), signed: true),
+            style: PayPactTypography.amountLg.copyWith(
+              fontSize: 18,
+              color:
+                  group.netBalance >= 0 ? pt.positive : pt.negative,
+            ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _AddGroupTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    return Container(
+      width: 80,
+      decoration: BoxDecoration(
+        color: pt.surfaceAlt,
+        borderRadius: PayPactRadius.lg,
+        border: Border.all(
+            color: pt.borderStrong, style: BorderStyle.solid),
+      ),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.add_rounded, color: pt.ink2, size: 18),
+          const SizedBox(height: 4),
+          Text('New',
+              style: PayPactTypography.bodySm
+                  .copyWith(color: pt.ink2, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+PpCategory _categoryFromString(String cat) {
+  switch (cat) {
+    case 'trip':
+      return PpCategory.trip;
+    case 'home':
+      return PpCategory.home;
+    case 'food':
+      return PpCategory.food;
+    case 'friends':
+      return PpCategory.friends;
+    case 'stay':
+      return PpCategory.stay;
+    case 'couple':
+      return PpCategory.couple;
+    case 'transport':
+      return PpCategory.transport;
+    case 'shopping':
+      return PpCategory.shopping;
+    default:
+      return PpCategory.other;
   }
 }

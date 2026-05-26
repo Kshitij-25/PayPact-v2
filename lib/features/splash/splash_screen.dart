@@ -1,32 +1,78 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+import 'package:paypact/core/navigation/app_router.dart';
+import 'package:paypact/design_system/tokens/typography.dart';
+import 'package:paypact/features/splash/cubit/splash_cubit.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => SplashCubit()..start(),
+      child: BlocListener<SplashCubit, SplashState>(
+        listener: (context, state) {
+          if (state is SplashDone) {
+            if (state.isAuthenticated) {
+              context.go(AppRoutes.home);
+            } else {
+              context.go(AppRoutes.onboarding);
+            }
+          }
+        },
+        child: const _SplashBody(),
+      ),
+    );
+  }
 }
 
-class _SplashScreenState extends State<SplashScreen>
+class _SplashBody extends StatefulWidget {
+  const _SplashBody();
+
+  @override
+  State<_SplashBody> createState() => _SplashBodyState();
+}
+
+class _SplashBodyState extends State<_SplashBody>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
-  late final Animation<double> _fade;
-  late final Animation<double> _scale;
+  late final Animation<double> _markScale;
+  late final Animation<double> _markFade;
+  late final Animation<double> _wordmarkFade;
+  late final Animation<double> _taglineFade;
+  late final Animation<double> _progress;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
-    );
+      duration: const Duration(milliseconds: 2500),
+    )..forward();
 
-    _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _scale = Tween<double>(begin: 0.82, end: 1.0).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack),
+    _markScale = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.0, 0.32, curve: Curves.easeOut)),
     );
-
-    _ctrl.forward();
+    _markFade = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.0, 0.32, curve: Curves.easeOut),
+    );
+    _wordmarkFade = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.24, 0.44, curve: Curves.easeOut),
+    );
+    _taglineFade = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.30, 0.50, curve: Curves.easeOut),
+    );
+    _progress = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.32, 0.96, curve: Curves.easeInOut),
+    );
   }
 
   @override
@@ -37,76 +83,159 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    const surface = Color(0xFF1F1B16);
+    const ink = Color(0xFFFAF7F1);
+    const clay = Color(0xFFC77556);
+
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fade,
-          child: ScaleTransition(
-            scale: _scale,
+      backgroundColor: surface,
+      body: Stack(
+        children: [
+          Positioned(
+            top: -100,
+            left: -80,
+            child: _glow(clay.withValues(alpha: 0.32), 420),
+          ),
+          Positioned(
+            bottom: -120,
+            right: -100,
+            child:
+                _glow(const Color(0xFF7DA37C).withValues(alpha: 0.18), 380),
+          ),
+          Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ── App icon ────────────────────────────────────────────────
-                Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.25),
-                      width: 1.5,
+                FadeTransition(
+                  opacity: _markFade,
+                  child: ScaleTransition(
+                    scale: _markScale,
+                    child: _PactMark(
+                        size: 92, ringColor: clay, inkColor: ink),
+                  ),
+                ),
+                const SizedBox(height: 38),
+                FadeTransition(
+                  opacity: _wordmarkFade,
+                  child: Text(
+                    'PayPact',
+                    style: PayPactTypography.displayLg.copyWith(
+                      color: ink,
+                      letterSpacing: -0.04 * 28,
                     ),
                   ),
-                  child: const Center(
+                ),
+                const SizedBox(height: 10),
+                FadeTransition(
+                  opacity: _taglineFade,
+                  child: SizedBox(
+                    width: 240,
                     child: Text(
-                      '💸',
-                      style: TextStyle(fontSize: 46),
+                      'Quiet money between people who matter.',
+                      textAlign: TextAlign.center,
+                      style: PayPactTypography.bodyLg.copyWith(
+                        color: ink.withValues(alpha: 0.55),
+                        height: 1.55,
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // ── App name ─────────────────────────────────────────────────
-                const Text(
-                  'Paypact',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Split smarter, together',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.white.withValues(alpha: 0.65),
-                    letterSpacing: 0.2,
-                  ),
-                ),
-
-                const SizedBox(height: 64),
-
-                // ── Loading indicator ────────────────────────────────────────
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white.withValues(alpha: 0.5),
                   ),
                 ),
               ],
             ),
           ),
-        ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 60,
+            child: Column(
+              children: [
+                Container(
+                  width: 38,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: ink.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: AnimatedBuilder(
+                    animation: _progress,
+                    builder: (_, __) => FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: _progress.value,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: clay,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'V 2.0 · WARMING UP',
+                  style: PayPactTypography.label.copyWith(
+                    color: ink.withValues(alpha: 0.35),
+                    fontSize: 10,
+                    letterSpacing: 1.6,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _glow(Color c, double s) => Container(
+        width: s,
+        height: s,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+              colors: [c, c.withValues(alpha: 0)], stops: const [0, 0.7]),
+        ),
+      );
+}
+
+class _PactMark extends StatelessWidget {
+  const _PactMark(
+      {required this.size, required this.ringColor, required this.inkColor});
+  final double size;
+  final Color ringColor;
+  final Color inkColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _PactPainter(ringColor, inkColor)),
+    );
+  }
+}
+
+class _PactPainter extends CustomPainter {
+  _PactPainter(this.a, this.b);
+  final Color a;
+  final Color b;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = size.width * 0.033;
+    final r = size.width * 0.305;
+    final pa = Paint()
+      ..color = a
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke;
+    final pb = Paint()
+      ..color = b.withValues(alpha: 0.85)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke;
+    canvas.drawCircle(Offset(size.width * 0.39, size.height * 0.5), r, pa);
+    canvas.drawCircle(Offset(size.width * 0.61, size.height * 0.5), r, pb);
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
 }

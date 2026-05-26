@@ -1,440 +1,405 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:paypact/core/utils/currency_formatter.dart';
-import 'package:paypact/features/auth/presentation/bloc/auth_bloc.dart';
-import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
-import 'package:paypact/features/expense/domain/use_cases/create_expense_use_case.dart';
-import 'package:paypact/features/expense/domain/use_cases/update_expense_use_case.dart';
-import 'package:paypact/features/expense/presentation/bloc/expense_bloc.dart';
-import 'package:paypact/features/expense/presentation/widgets/amount_field.dart';
-import 'package:paypact/features/expense/presentation/widgets/category_chips.dart';
-import 'package:paypact/features/expense/presentation/widgets/desc_field.dart';
-import 'package:paypact/features/expense/presentation/widgets/equal_row.dart';
-import 'package:paypact/features/expense/presentation/widgets/exact_row.dart';
-import 'package:paypact/features/expense/presentation/widgets/paid_by_dropdown.dart';
-import 'package:paypact/features/expense/presentation/widgets/percentage_row.dart';
-import 'package:paypact/features/expense/presentation/widgets/share_row.dart';
-import 'package:paypact/features/expense/presentation/widgets/split_preview.dart';
-import 'package:paypact/features/expense/presentation/widgets/split_type_selector.dart';
-import 'package:paypact/features/expense/presentation/widgets/submit_bar.dart';
-import 'package:paypact/features/expense/presentation/widgets/title_field.dart';
-import 'package:paypact/features/group/domain/entities/group_entity.dart';
-import 'package:paypact/features/group/domain/entities/member_entity.dart';
-import 'package:paypact/features/group/presentation/bloc/group_bloc.dart';
-import 'package:paypact/features/profile/presentation/bloc/settings_bloc.dart';
-import 'package:paypact/core/utils/responsive.dart';
-import 'package:paypact/widgets/section_label.dart';
+import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/design_system/components/paypact_button.dart';
+import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
+import 'package:paypact/design_system/tokens/radius.dart';
+import 'package:paypact/design_system/tokens/typography.dart';
+import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
+import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/expense/presentation/cubit/add_expense_cubit.dart';
+import 'package:paypact/features/group/domain/repositories/group_repository.dart';
+import 'package:paypact/widgets/pp_atoms.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Screen
-// ─────────────────────────────────────────────────────────────────────────────
-
-class AddExpenseScreen extends StatefulWidget {
-  const AddExpenseScreen({
-    super.key,
-    required this.groupId,
-    this.expenseId,
-  });
-
-  final String groupId;
-  final String? expenseId;
-
-  bool get isEditing => expenseId != null;
+class AddExpenseScreen extends StatelessWidget {
+  const AddExpenseScreen({super.key, this.groupId});
+  final String? groupId;
 
   @override
-  State<AddExpenseScreen> createState() => _AddExpenseScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => AddExpenseCubit(locator<ExpenseRepository>()),
+      child: _AddExpenseBody(groupId: groupId),
+    );
+  }
 }
 
-class _AddExpenseScreenState extends State<AddExpenseScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleCtrl = TextEditingController();
-  final _amountCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
-
-  SplitType _splitType = SplitType.equal;
-  ExpenseCategory _category = ExpenseCategory.other;
-
-  late List<MemberEntity> _groupMembers;
-  late Set<String> _includedIds;
-  late String _paidBy;
-
-  final Map<String, TextEditingController> _splitCtrl = {};
-  final Map<String, int> _shareCount = {};
-  ExpenseEntity? _editingExpense;
+class _AddExpenseBody extends StatefulWidget {
+  const _AddExpenseBody({this.groupId});
+  final String? groupId;
 
   @override
-  void initState() {
-    super.initState();
-    _initGroup();
-    if (widget.isEditing) _populateForEdit();
-  }
+  State<_AddExpenseBody> createState() => _AddExpenseBodyState();
+}
 
-  void _initGroup() {
-    final group = _group;
-    _groupMembers = group?.members ?? [];
-    _includedIds = _groupMembers.map((m) => m.userId).toSet();
-    _paidBy = context.read<AuthBloc>().state.user?.id ??
-        (_groupMembers.isNotEmpty ? _groupMembers.first.userId : '');
-    for (final m in _groupMembers) {
-      _splitCtrl[m.userId] = TextEditingController();
-      _shareCount[m.userId] = 1;
-    }
-  }
+class _AddExpenseBodyState extends State<_AddExpenseBody> {
+  final _titleCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
+  String _selectedCategory = 'food';
 
-  void _populateForEdit() {
-    final expense = context
-        .read<ExpenseBloc>()
-        .state
-        .expenses
-        .where((e) => e.id == widget.expenseId)
-        .firstOrNull;
-    if (expense == null) return;
-    _editingExpense = expense;
-
-    _titleCtrl.text = expense.title;
-    _amountCtrl.text = expense.amount.toString();
-    _descCtrl.text = expense.description ?? '';
-    _category = expense.category;
-    _splitType = expense.splitType;
-    _paidBy = expense.paidBy.keys.first;
-    _includedIds = expense.splits.map((s) => s.userId).toSet();
-
-    for (final split in expense.splits) {
-      _splitCtrl[split.userId]?.text = switch (expense.splitType) {
-        SplitType.exact => split.amount.toStringAsFixed(2),
-        SplitType.percentage => (split.percentage ?? 0.0).toStringAsFixed(1),
-        SplitType.shares => (split.shares ?? 1).toString(),
-        SplitType.equal => '',
-      };
-      if (expense.splitType == SplitType.shares) {
-        _shareCount[split.userId] = split.shares ?? 1;
-      }
-    }
-  }
-
-  GroupEntity? get _group => context
-      .read<GroupBloc>()
-      .state
-      .groups
-      .where((g) => g.id == widget.groupId)
-      .firstOrNull;
-
-  /// Group currency takes priority; falls back to the user's profile
-  /// currency setting rather than a hardcoded 'USD'.
-  String get _effectiveCurrency =>
-      _group?.currency ?? context.read<SettingsBloc>().state.currency;
+  static const _cats = [
+    _CatChoice('Food', '🍽', PpCategory.food, 'food'),
+    _CatChoice('Stay', '🛏', PpCategory.stay, 'stay'),
+    _CatChoice('Transport', '🚕', PpCategory.transport, 'transport'),
+    _CatChoice('Shopping', '🛍', PpCategory.shopping, 'shopping'),
+    _CatChoice('Other', '✨', PpCategory.other, 'other'),
+  ];
 
   @override
   void dispose() {
     _titleCtrl.dispose();
     _amountCtrl.dispose();
-    _descCtrl.dispose();
-    for (final c in _splitCtrl.values) {
-      c.dispose();
-    }
     super.dispose();
-  }
-
-  List<MemberEntity> get _includedMembers =>
-      _groupMembers.where((m) => _includedIds.contains(m.userId)).toList();
-
-  String? _validateSplits(double total) {
-    final included = _includedMembers;
-    if (included.isEmpty) return 'Select at least one member';
-    switch (_splitType) {
-      case SplitType.equal:
-        return null;
-      case SplitType.exact:
-        final sum = included.fold(
-            0.0,
-            (s, m) =>
-                s + (double.tryParse(_splitCtrl[m.userId]?.text ?? '') ?? 0));
-        if ((sum - total).abs() > 0.01) {
-          final cur = _effectiveCurrency;
-          return 'Exact amounts must sum to ${CurrencyFormatter.format(total, cur)} '
-              '(currently ${CurrencyFormatter.format(sum, cur)})';
-        }
-        return null;
-      case SplitType.percentage:
-        final sum = included.fold(
-            0.0,
-            (s, m) =>
-                s + (double.tryParse(_splitCtrl[m.userId]?.text ?? '') ?? 0));
-        if ((sum - 100).abs() > 0.1) {
-          return 'Percentages must sum to 100% (currently ${sum.toStringAsFixed(1)}%)';
-        }
-        return null;
-      case SplitType.shares:
-        final totalShares =
-            included.fold(0, (s, m) => s + (_shareCount[m.userId] ?? 0));
-        if (totalShares == 0) return 'At least one share required';
-        return null;
-    }
-  }
-
-  Map<String, double>? get _exactAmounts {
-    if (_splitType != SplitType.exact) return null;
-    return {
-      for (final m in _includedMembers)
-        m.userId: double.tryParse(_splitCtrl[m.userId]?.text ?? '') ?? 0.0,
-    };
-  }
-
-  Map<String, double>? get _percentages {
-    if (_splitType != SplitType.percentage) return null;
-    return {
-      for (final m in _includedMembers)
-        m.userId: double.tryParse(_splitCtrl[m.userId]?.text ?? '') ?? 0.0,
-    };
-  }
-
-  Map<String, int>? get _shares {
-    if (_splitType != SplitType.shares) return null;
-    return {
-      for (final m in _includedMembers) m.userId: _shareCount[m.userId] ?? 1,
-    };
-  }
-
-  Map<String, double> _previewAmounts(double total) {
-    final ids = _includedMembers.map((m) => m.userId).toList();
-    if (ids.isEmpty || total <= 0) return {};
-    switch (_splitType) {
-      case SplitType.equal:
-        final per = total / ids.length;
-        return {for (final id in ids) id: per};
-      case SplitType.exact:
-        return {
-          for (final m in _includedMembers)
-            m.userId: double.tryParse(_splitCtrl[m.userId]?.text ?? '') ?? 0.0,
-        };
-      case SplitType.percentage:
-        return {
-          for (final m in _includedMembers)
-            m.userId: total *
-                (double.tryParse(_splitCtrl[m.userId]?.text ?? '') ?? 0.0) /
-                100,
-        };
-      case SplitType.shares:
-        final totalShares = ids.fold(0, (s, id) => s + (_shareCount[id] ?? 0));
-        if (totalShares == 0) return {};
-        return {
-          for (final id in ids)
-            id: total * (_shareCount[id] ?? 0) / totalShares,
-        };
-    }
-  }
-
-  void _submit() {
-    if (!_formKey.currentState!.validate()) return;
-    final total = double.tryParse(_amountCtrl.text) ?? 0;
-    if (total <= 0) return;
-
-    final splitError = _validateSplits(total);
-    if (splitError != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(splitError)));
-      return;
-    }
-
-    final memberIds = _includedMembers.map((m) => m.userId).toList();
-    final currency = _effectiveCurrency;
-
-    if (widget.isEditing && _editingExpense != null) {
-      context.read<ExpenseBloc>().add(ExpenseUpdateRequested(
-            UpdateExpenseParams(
-              expense: _editingExpense!.copyWith(
-                title: _titleCtrl.text.trim(),
-                amount: total,
-                paidBy: {_paidBy: total},
-                description: _descCtrl.text.trim().isNotEmpty
-                    ? _descCtrl.text.trim()
-                    : null,
-                category: _category,
-                currency: currency,
-              ),
-              splitType: _splitType,
-              memberIds: memberIds,
-              exactAmounts: _exactAmounts,
-              percentages: _percentages,
-              shares: _shares,
-            ),
-          ));
-    } else {
-      context.read<ExpenseBloc>().add(ExpenseCreateRequested(
-            CreateExpenseParams(
-              groupId: widget.groupId,
-              title: _titleCtrl.text.trim(),
-              amount: total,
-              paidBy: {_paidBy: total},
-              splitType: _splitType,
-              memberIds: memberIds,
-              createdBy: context.read<AuthBloc>().state.user?.id ?? '',
-              description: _descCtrl.text.trim().isNotEmpty
-                  ? _descCtrl.text.trim()
-                  : null,
-              category: _category,
-              currency: currency,
-              exactAmounts: _exactAmounts,
-              percentages: _percentages,
-              shares: _shares,
-            ),
-          ));
-    }
-    context.pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    final currency = _effectiveCurrency;
-    final total = double.tryParse(_amountCtrl.text) ?? 0;
+    final pt = context.pt;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit Expense' : 'Add Expense'),
-      ),
-      body: ResponsiveCenter(
-        maxWidth: 720,
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(
-              Responsive.hPadding(context),
-              16,
-              Responsive.hPadding(context),
-              120,
-            ),
-          children: [
-            TitleField(controller: _titleCtrl),
-            const SizedBox(height: 14),
-            AmountField(
-              controller: _amountCtrl,
-              currency: currency,
-              onChanged: () => setState(() {}),
-            ),
-            const SizedBox(height: 14),
-            DescField(controller: _descCtrl),
-            const SizedBox(height: 20),
-            const SectionLabel('Category'),
-            const SizedBox(height: 8),
-            CategoryChips(
-              selected: _category,
-              onChanged: (c) => setState(() => _category = c),
-            ),
-            const SizedBox(height: 20),
-            const SectionLabel('Paid by'),
-            const SizedBox(height: 8),
-            PaidByDropdown(
-              members: _groupMembers,
-              value: _paidBy,
-              onChanged: (v) => setState(() => _paidBy = v),
-            ),
-            const SizedBox(height: 20),
-            const SectionLabel('Split type'),
-            const SizedBox(height: 8),
-            SplitTypeSelector(
-              value: _splitType,
-              onChanged: (t) => setState(() {
-                _splitType = t;
-                for (final c in _splitCtrl.values) {
-                  c.clear();
-                }
-              }),
-            ),
-            const SizedBox(height: 20),
-            const SectionLabel('Split between'),
-            const SizedBox(height: 8),
-            ..._buildSplitRows(currency),
-            if (total > 0 && _includedMembers.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              SplitPreview(
-                preview: _previewAmounts(total),
-                members: _groupMembers,
-                currency: currency,
+    return BlocConsumer<AddExpenseCubit, AddExpenseState>(
+      listener: (context, state) {
+        if (state is AddExpenseSuccess) {
+          context.pop();
+        } else if (state is AddExpenseError) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(state.message)));
+        }
+      },
+      builder: (context, state) {
+        final loading = state is AddExpenseLoading;
+        final amountText = _amountCtrl.text;
+        final parsedAmount = double.tryParse(amountText) ?? 0;
+
+        return Scaffold(
+          backgroundColor: pt.bg,
+          body: Stack(
+            children: [
+              Opacity(
+                opacity: 0.35,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.fromLTRB(24, 70, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('ADD EXPENSE',
+                          style: PayPactTypography.label
+                              .copyWith(color: pt.ink3)),
+                      const SizedBox(height: 10),
+                      Text('Split it easily',
+                          style: PayPactTypography.amountHero
+                              .copyWith(color: pt.ink, fontSize: 32)),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter:
+                      ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                  child: Container(
+                    color: (isDark
+                            ? Colors.black
+                            : const Color(0xFF1F1B16))
+                        .withValues(
+                            alpha: isDark ? 0.45 : 0.32),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 120,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(
+                      24, 14, 24, 0),
+                  decoration: BoxDecoration(
+                    color: pt.bg,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28)),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black
+                              .withValues(alpha: 0.18),
+                          offset: const Offset(0, -24),
+                          blurRadius: 60),
+                    ],
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 38,
+                            height: 5,
+                            margin: const EdgeInsets.only(
+                                bottom: 18),
+                            decoration: BoxDecoration(
+                              color: pt.borderStrong
+                                  .withValues(alpha: 0.5),
+                              borderRadius:
+                                  BorderRadius.circular(99),
+                            ),
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment:
+                              MainAxisAlignment.spaceBetween,
+                          children: [
+                            GestureDetector(
+                              onTap: () => context.pop(),
+                              child: Text('Cancel',
+                                  style: PayPactTypography
+                                      .bodyMd
+                                      .copyWith(color: pt.ink3)),
+                            ),
+                            Text('New expense',
+                                style: PayPactTypography.headingMd
+                                    .copyWith(color: pt.ink)),
+                            GestureDetector(
+                              onTap: loading ? null : _save,
+                              child: Text('Save',
+                                  style: PayPactTypography
+                                      .bodyMd
+                                      .copyWith(
+                                          color: loading
+                                              ? pt.ink3
+                                              : pt.accent,
+                                          fontWeight:
+                                              FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Center(
+                          child: Column(
+                            children: [
+                              Text('AMOUNT',
+                                  style: PayPactTypography.label
+                                      .copyWith(
+                                          color: pt.ink3,
+                                          letterSpacing: 1.6)),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: 200,
+                                child: TextField(
+                                  controller: _amountCtrl,
+                                  keyboardType:
+                                      const TextInputType
+                                          .numberWithOptions(
+                                          decimal: true),
+                                  textAlign: TextAlign.center,
+                                  style: PayPactTypography
+                                      .amountHero
+                                      .copyWith(
+                                          color: pt.accent,
+                                          fontSize: 52),
+                                  decoration: InputDecoration(
+                                    hintText: '0',
+                                    hintStyle: PayPactTypography
+                                        .amountHero
+                                        .copyWith(
+                                            color: pt.ink3
+                                                .withValues(
+                                                    alpha: 0.4),
+                                            fontSize: 52),
+                                    border: InputBorder.none,
+                                    prefixText: '₹',
+                                    prefixStyle:
+                                        PayPactTypography
+                                            .amountHero
+                                            .copyWith(
+                                                color: pt.accent,
+                                                fontSize: 30),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Container(
+                          height: 52,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: pt.surface,
+                            borderRadius: PayPactRadius.md,
+                            border: Border.all(
+                                color: pt.accent, width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: pt.accentSoft,
+                                  spreadRadius: 3,
+                                  blurRadius: 0)
+                            ],
+                          ),
+                          child: Row(children: [
+                            Icon(Icons.receipt_long_outlined,
+                                size: 18, color: pt.ink2),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: _titleCtrl,
+                                style: PayPactTypography.bodyLg
+                                    .copyWith(
+                                        color: pt.ink,
+                                        fontSize: 15),
+                                decoration: InputDecoration(
+                                  hintText: 'What was it?',
+                                  hintStyle:
+                                      PayPactTypography.bodyLg
+                                          .copyWith(
+                                              color: pt.ink3,
+                                              fontSize: 15),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                          ]),
+                        ),
+                        const SizedBox(height: 14),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            for (var i = 0;
+                                i < _cats.length;
+                                i++) ...[
+                              GestureDetector(
+                                onTap: () => setState(() =>
+                                    _selectedCategory =
+                                        _cats[i].catId),
+                                child: _CategoryChip(
+                                  c: _cats[i],
+                                  selected: _selectedCategory ==
+                                      _cats[i].catId,
+                                ),
+                              ),
+                              if (i < _cats.length - 1)
+                                const SizedBox(width: 8),
+                            ],
+                          ]),
+                        ),
+                        const SizedBox(height: 18),
+                        if (parsedAmount > 0)
+                          PpGlassCard(
+                            padding: const EdgeInsets.all(14),
+                            radius: PayPactRadius.md,
+                            child: Row(children: [
+                              Icon(Icons.bolt_rounded,
+                                  color: pt.accent, size: 16),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Split equally among group members · ₹${parsedAmount.toStringAsFixed(2)} total',
+                                  style: PayPactTypography.bodySm
+                                      .copyWith(
+                                          color: pt.ink2,
+                                          height: 1.5),
+                                ),
+                              ),
+                            ]),
+                          ),
+                        const SizedBox(height: 18),
+                        PayPactButton(
+                          onPressed: loading ? null : _save,
+                          label: loading
+                              ? 'Saving…'
+                              : 'Save expense',
+                          variant: PayPactButtonVariant.accent,
+                          size: PayPactButtonSize.large,
+                          isFullWidth: true,
+                          leftIcon: Icons.check_rounded,
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
-            ],
           ),
-        ),
-      ),
-      bottomNavigationBar: SubmitBar(
-        label: widget.isEditing ? 'Save Changes' : 'Add Expense',
-        onTap: _submit,
-      ),
+        );
+      },
     );
   }
 
-  List<Widget> _buildSplitRows(String currency) {
-    switch (_splitType) {
-      case SplitType.equal:
-        return _groupMembers
-            .map((m) => EqualRow(
-                  member: m,
-                  checked: _includedIds.contains(m.userId),
-                  onChanged: (v) => setState(() {
-                    if (v) {
-                      _includedIds.add(m.userId);
-                    } else {
-                      _includedIds.remove(m.userId);
-                    }
-                  }),
-                ))
-            .toList();
+  Future<void> _save() async {
+    final authState = context.read<AuthCubit>().state;
+    if (authState is! AuthAuthenticated) return;
 
-      case SplitType.exact:
-        return _groupMembers
-            .map((m) => ExactRow(
-                  member: m,
-                  checked: _includedIds.contains(m.userId),
-                  controller: _splitCtrl[m.userId]!,
-                  currency: currency,
-                  onCheckChanged: (v) => setState(() {
-                    if (v) {
-                      _includedIds.add(m.userId);
-                    } else {
-                      _includedIds.remove(m.userId);
-                      _splitCtrl[m.userId]?.clear();
-                    }
-                  }),
-                  onAmountChanged: () => setState(() {}),
-                ))
-            .toList();
-
-      case SplitType.percentage:
-        return _groupMembers
-            .map((m) => PercentageRow(
-                  member: m,
-                  checked: _includedIds.contains(m.userId),
-                  controller: _splitCtrl[m.userId]!,
-                  onCheckChanged: (v) => setState(() {
-                    if (v) {
-                      _includedIds.add(m.userId);
-                    } else {
-                      _includedIds.remove(m.userId);
-                      _splitCtrl[m.userId]?.clear();
-                    }
-                  }),
-                  onPctChanged: () => setState(() {}),
-                ))
-            .toList();
-
-      case SplitType.shares:
-        return _groupMembers
-            .map((m) => SharesRow(
-                  member: m,
-                  checked: _includedIds.contains(m.userId),
-                  shares: _shareCount[m.userId] ?? 1,
-                  onCheckChanged: (v) => setState(() {
-                    if (v) {
-                      _includedIds.add(m.userId);
-                    } else {
-                      _includedIds.remove(m.userId);
-                    }
-                  }),
-                  onSharesChanged: (v) =>
-                      setState(() => _shareCount[m.userId] = v),
-                ))
-            .toList();
+    final gid = widget.groupId;
+    if (gid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No group selected')));
+      return;
     }
+
+    final group = await locator<GroupRepository>().getGroup(gid);
+    final members = group?.memberNames ?? {
+      authState.user.id: authState.user.name
+    };
+
+    if (!mounted) return;
+    context.read<AddExpenseCubit>().saveExpense(
+          groupId: gid,
+          title: _titleCtrl.text,
+          amount: double.tryParse(_amountCtrl.text) ?? 0,
+          category: _selectedCategory,
+          paidById: authState.user.id,
+          paidByName: authState.user.name,
+          members: members,
+          currentUserId: authState.user.id,
+        );
+  }
+}
+
+class _CatChoice {
+  final String label;
+  final String emoji;
+  final PpCategory cat;
+  final String catId;
+  const _CatChoice(this.label, this.emoji, this.cat, this.catId);
+}
+
+class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({required this.c, required this.selected});
+  final _CatChoice c;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    final tones = PpCategoryDisc.tone(context, c.cat);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color:
+            selected ? tones[0] : Colors.transparent,
+        borderRadius: PayPactRadius.full,
+        border: Border.all(
+            color:
+                selected ? Colors.transparent : pt.border),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(c.emoji, style: const TextStyle(fontSize: 14)),
+        const SizedBox(width: 6),
+        Text(c.label,
+            style: PayPactTypography.bodyMd.copyWith(
+                color: selected ? tones[1] : pt.ink2,
+                fontWeight: FontWeight.w600,
+                fontSize: 13)),
+      ]),
+    );
   }
 }

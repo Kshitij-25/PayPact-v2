@@ -86,33 +86,33 @@ class PaypactThemeExtension extends ThemeExtension<PaypactThemeExtension> {
   // ── Convenience presets ───────────────────────────────────────────────────
 
   static const light = PaypactThemeExtension(
-    primary: Color(0xFF4F46E5),
-    primaryLight: Color(0xFF818CF8),
-    primaryDark: Color(0xFF3730A3),
-    secondary: Color(0xFF10B981),
-    danger: Color(0xFFEF4444),
-    warning: Color(0xFFF59E0B),
-    textPrimary: Color(0xFF111827),
-    textSecondary: Color(0xFF6B7280),
-    divider: Color(0xFFE5E7EB),
-    surface: Color(0xFFF9FAFB),
-    cardBg: Color(0xFFFFFFFF),
-    inputFill: Color(0xFFFFFFFF),
+    primary: Color(0xFFB05A3C), // clay
+    primaryLight: Color(0xFFEDD9CF),
+    primaryDark: Color(0xFF7A3A24),
+    secondary: Color(0xFF5C7B5B), // sage
+    danger: Color(0xFF9B4736), // muted terracotta
+    warning: Color(0xFF9A7530), // olive
+    textPrimary: Color(0xFF1F1B16),
+    textSecondary: Color(0xFF6B6357),
+    divider: Color(0xFFE2DACA),
+    surface: Color(0xFFF5F2EC), // bone
+    cardBg: Color(0xFFFAF7F1), // paper
+    inputFill: Color(0xFFFAF7F1),
   );
 
   static const dark = PaypactThemeExtension(
-    primary: Color(0xFF818CF8),
-    primaryLight: Color(0xFF818CF8),
-    primaryDark: Color(0xFF3730A3),
-    secondary: Color(0xFF10B981),
-    danger: Color(0xFFEF4444),
-    warning: Color(0xFFF59E0B),
-    textPrimary: Color(0xFFF1F5F9),
-    textSecondary: Color(0xFF94A3B8),
-    divider: Color(0xFF334155),
-    surface: Color(0xFF0F172A),
-    cardBg: Color(0xFF1E293B),
-    inputFill: Color(0xFF1E293B),
+    primary: Color(0xFFC77556),
+    primaryLight: Color(0xFF3A2218),
+    primaryDark: Color(0xFFE6A48A),
+    secondary: Color(0xFF7DA37C),
+    danger: Color(0xFFC46B59),
+    warning: Color(0xFFC29A4F),
+    textPrimary: Color(0xFFECE4D2),
+    textSecondary: Color(0xFF9C9385),
+    divider: Color(0xFF2E2820),
+    surface: Color(0xFF100D09),
+    cardBg: Color(0xFF1A1612),
+    inputFill: Color(0xFF1A1612),
   );
 }
 
