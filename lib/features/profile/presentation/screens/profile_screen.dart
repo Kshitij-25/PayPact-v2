@@ -62,26 +62,28 @@ class _ProfileBody extends StatelessWidget {
                     style: PayPactTypography.headingMd
                         .copyWith(color: pt.ink)),
                 const SizedBox(height: 16),
-                Container(
-                  height: 52,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: pt.bg,
-                    borderRadius: PayPactRadius.md,
-                    border: Border.all(color: pt.border),
-                  ),
-                  child: TextField(
-                    controller: ctrl,
-                    autofocus: true,
-                    style: PayPactTypography.bodyMd
-                        .copyWith(color: pt.ink),
-                    decoration: InputDecoration(
-                      border: InputBorder.none,
-                      hintText: 'Your name',
-                      hintStyle: PayPactTypography.bodyMd
-                          .copyWith(color: pt.ink3),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  style: PayPactTypography.bodyMd.copyWith(color: pt.ink),
+                  decoration: InputDecoration(
+                    hintText: 'Your name',
+                    hintStyle: PayPactTypography.bodyMd.copyWith(color: pt.ink3),
+                    filled: true,
+                    fillColor: pt.bg,
+                    border: OutlineInputBorder(
+                      borderRadius: PayPactRadius.md,
+                      borderSide: BorderSide(color: pt.borderStrong),
                     ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: PayPactRadius.md,
+                      borderSide: BorderSide(color: pt.borderStrong),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: PayPactRadius.md,
+                      borderSide: BorderSide(color: pt.accent, width: 1.4),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   ),
                 ),
                 const SizedBox(height: 16),

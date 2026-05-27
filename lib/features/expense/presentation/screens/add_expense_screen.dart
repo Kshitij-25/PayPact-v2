@@ -3,15 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
-import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/presentation/cubit/add_expense_cubit.dart';
+import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
+
+typedef _SplitResult = ({String splitType, Map<String, double> customSplits});
 
 class AddExpenseScreen extends StatelessWidget {
   const AddExpenseScreen({super.key, this.groupId});
@@ -20,7 +24,7 @@ class AddExpenseScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => AddExpenseCubit(locator<ExpenseRepository>()),
+      create: (_) => AddExpenseCubit(locator(), locator(), locator()),
       child: _AddExpenseBody(groupId: groupId),
     );
   }
@@ -37,7 +41,19 @@ class _AddExpenseBody extends StatefulWidget {
 class _AddExpenseBodyState extends State<_AddExpenseBody> {
   final _titleCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
+
   String _selectedCategory = 'food';
+  String _groupCurrency = kDefaultCurrency;
+  String _selectedCurrency = kDefaultCurrency;
+
+  GroupEntity? _group;
+  String _paidById = '';
+  String _paidByName = '';
+
+  String _splitType = 'equally';
+  Map<String, double> _customSplits = {};
+
+  bool _useYesterday = false;
 
   static const _cats = [
     _CatChoice('Food', '🍽', PpCategory.food, 'food'),
@@ -48,16 +64,196 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadGroup();
+  }
+
+  Future<void> _loadGroup() async {
+    final gid = widget.groupId;
+    if (gid == null) return;
+    final group = await locator<GroupRepository>().getGroup(gid);
+    if (!mounted || group == null) return;
+
+    final authState = context.read<AuthCubit>().state;
+    final currentUserId =
+        authState is AuthAuthenticated ? authState.user.id : '';
+    final currentUserName =
+        authState is AuthAuthenticated ? authState.user.name : '';
+
+    setState(() {
+      _group = group;
+      _groupCurrency = group.currency;
+      _selectedCurrency = group.currency;
+      _paidById = currentUserId;
+      _paidByName = currentUserName;
+    });
+  }
+
+  @override
   void dispose() {
     _titleCtrl.dispose();
     _amountCtrl.dispose();
     super.dispose();
   }
 
+  double get _parsedAmount => double.tryParse(_amountCtrl.text) ?? 0;
+
+  List<ExpenseSplitEntity> _buildUiSplits(double amount) {
+    final members = _group?.memberNames ?? {};
+    if (members.isEmpty) return [];
+
+    switch (_splitType) {
+      case 'equally':
+        final each = amount / members.length;
+        return members.entries
+            .map((e) => ExpenseSplitEntity(
+                  userId: e.key,
+                  userName: e.value,
+                  amount: double.parse(each.toStringAsFixed(2)),
+                ))
+            .toList();
+      case 'exact':
+        return members.entries
+            .map((e) => ExpenseSplitEntity(
+                  userId: e.key,
+                  userName: e.value,
+                  amount: _customSplits[e.key] ?? 0,
+                ))
+            .toList();
+      case 'percent':
+        return members.entries
+            .map((e) => ExpenseSplitEntity(
+                  userId: e.key,
+                  userName: e.value,
+                  amount: double.parse(
+                      (amount * (_customSplits[e.key] ?? 0) / 100)
+                          .toStringAsFixed(2)),
+                ))
+            .toList();
+      case 'shares':
+        final totalShares =
+            members.keys.fold(0.0, (s, id) => s + (_customSplits[id] ?? 1));
+        return members.entries
+            .map((e) {
+              final shares = _customSplits[e.key] ?? 1;
+              return ExpenseSplitEntity(
+                userId: e.key,
+                userName: e.value,
+                amount: totalShares > 0
+                    ? double.parse(
+                        (amount * shares / totalShares).toStringAsFixed(2))
+                    : 0,
+              );
+            })
+            .toList();
+      default:
+        return [];
+    }
+  }
+
+  String _splitLabel() {
+    final n = _group?.memberNames.length ?? 0;
+    switch (_splitType) {
+      case 'equally':
+        return 'Equally · $n people';
+      case 'exact':
+        return 'Exact amounts · $n people';
+      case 'percent':
+        return 'By percentage · $n people';
+      case 'shares':
+        return 'By shares · $n people';
+      default:
+        return 'Equally · $n people';
+    }
+  }
+
+  String _smartSplitText(String currentUserId) {
+    final amount = _parsedAmount;
+    if (amount <= 0) return '';
+    final splits = _buildUiSplits(amount);
+    if (splits.isEmpty) return '';
+
+    final cur = currencyOf(_selectedCurrency);
+    final n = splits.length;
+
+    final mySplit = splits.firstWhere(
+      (s) => s.userId == currentUserId,
+      orElse: () =>
+          ExpenseSplitEntity(userId: '', userName: '', amount: 0),
+    );
+
+    if (_paidById == currentUserId) {
+      final othersTotal = amount - mySplit.amount;
+      if (_splitType == 'equally') {
+        return '$n × ${cur.symbol}${(amount / n).toStringAsFixed(2)} — others owe you ${cur.symbol}${othersTotal.toStringAsFixed(2)}';
+      }
+      return 'others owe you ${cur.symbol}${othersTotal.toStringAsFixed(2)} total';
+    } else {
+      return 'you owe $_paidByName ${cur.symbol}${mySplit.amount.toStringAsFixed(2)}';
+    }
+  }
+
+  void _pickCurrency() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CurrencyPickerSheet(
+        selected: _selectedCurrency,
+        onPick: (code) => setState(() => _selectedCurrency = code),
+      ),
+    );
+  }
+
+  void _pickPaidBy() {
+    final members = _group?.memberNames ?? {};
+    if (members.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PaidByPickerSheet(
+        members: members,
+        selectedId: _paidById,
+        onPick: (id, name) => setState(() {
+          _paidById = id;
+          _paidByName = name;
+        }),
+      ),
+    );
+  }
+
+  void _adjustSplit() async {
+    final members = _group?.memberNames ?? {};
+    if (members.isEmpty) return;
+    final result = await showModalBottomSheet<_SplitResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SplitAdjustSheet(
+        members: members,
+        currentSplitType: _splitType,
+        currentCustomSplits: _customSplits,
+        totalAmount: _parsedAmount,
+        currency: _selectedCurrency,
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _splitType = result.splitType;
+        _customSplits = result.customSplits;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final authState = context.read<AuthCubit>().state;
+    final currentUserId =
+        authState is AuthAuthenticated ? authState.user.id : '';
 
     return BlocConsumer<AddExpenseCubit, AddExpenseState>(
       listener: (context, state) {
@@ -70,267 +266,402 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
       },
       builder: (context, state) {
         final loading = state is AddExpenseLoading;
-        final amountText = _amountCtrl.text;
-        final parsedAmount = double.tryParse(amountText) ?? 0;
+        final parsedAmount = _parsedAmount;
+        final selectedCur = currencyOf(_selectedCurrency);
+        final isForeign = _selectedCurrency != _groupCurrency;
+        final smartText = _smartSplitText(currentUserId);
+        final memberCount = _group?.memberNames.length ?? 0;
 
-        return Scaffold(
-          backgroundColor: pt.bg,
-          body: Stack(
-            children: [
-              Opacity(
-                opacity: 0.35,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(24, 70, 24, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('ADD EXPENSE',
-                          style: PayPactTypography.label
-                              .copyWith(color: pt.ink3)),
-                      const SizedBox(height: 10),
-                      Text('Split it easily',
-                          style: PayPactTypography.amountHero
-                              .copyWith(color: pt.ink, fontSize: 32)),
-                    ],
-                  ),
-                ),
+        final sheetContent = Container(
+          decoration: BoxDecoration(
+            color: pt.bg,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                offset: const Offset(0, -24),
+                blurRadius: 60,
               ),
-              Positioned.fill(
-                child: BackdropFilter(
-                  filter:
-                      ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+            ],
+          ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+                0, 14, 0, MediaQuery.of(context).viewInsets.bottom + 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Handle
+                Center(
                   child: Container(
-                    color: (isDark
-                            ? Colors.black
-                            : const Color(0xFF1F1B16))
-                        .withValues(
-                            alpha: isDark ? 0.45 : 0.32),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 120,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(
-                      24, 14, 24, 0),
-                  decoration: BoxDecoration(
-                    color: pt.bg,
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28)),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black
-                              .withValues(alpha: 0.18),
-                          offset: const Offset(0, -24),
-                          blurRadius: 60),
-                    ],
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        Center(
-                          child: Container(
-                            width: 38,
-                            height: 5,
-                            margin: const EdgeInsets.only(
-                                bottom: 18),
-                            decoration: BoxDecoration(
-                              color: pt.borderStrong
-                                  .withValues(alpha: 0.5),
-                              borderRadius:
-                                  BorderRadius.circular(99),
-                            ),
-                          ),
-                        ),
-                        Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.spaceBetween,
-                          children: [
-                            GestureDetector(
-                              onTap: () => context.pop(),
-                              child: Text('Cancel',
-                                  style: PayPactTypography
-                                      .bodyMd
-                                      .copyWith(color: pt.ink3)),
-                            ),
-                            Text('New expense',
-                                style: PayPactTypography.headingMd
-                                    .copyWith(color: pt.ink)),
-                            GestureDetector(
-                              onTap: loading ? null : _save,
-                              child: Text('Save',
-                                  style: PayPactTypography
-                                      .bodyMd
-                                      .copyWith(
-                                          color: loading
-                                              ? pt.ink3
-                                              : pt.accent,
-                                          fontWeight:
-                                              FontWeight.w600)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Center(
-                          child: Column(
-                            children: [
-                              Text('AMOUNT',
-                                  style: PayPactTypography.label
-                                      .copyWith(
-                                          color: pt.ink3,
-                                          letterSpacing: 1.6)),
-                              const SizedBox(height: 10),
-                              SizedBox(
-                                width: 200,
-                                child: TextField(
-                                  controller: _amountCtrl,
-                                  keyboardType:
-                                      const TextInputType
-                                          .numberWithOptions(
-                                          decimal: true),
-                                  textAlign: TextAlign.center,
-                                  style: PayPactTypography
-                                      .amountHero
-                                      .copyWith(
-                                          color: pt.accent,
-                                          fontSize: 52),
-                                  decoration: InputDecoration(
-                                    hintText: '0',
-                                    hintStyle: PayPactTypography
-                                        .amountHero
-                                        .copyWith(
-                                            color: pt.ink3
-                                                .withValues(
-                                                    alpha: 0.4),
-                                            fontSize: 52),
-                                    border: InputBorder.none,
-                                    enabledBorder: InputBorder.none,
-                                    focusedBorder: InputBorder.none,
-                                    filled: false,
-                                    prefixText: '₹',
-                                    prefixStyle:
-                                        PayPactTypography
-                                            .amountHero
-                                            .copyWith(
-                                                color: pt.accent,
-                                                fontSize: 30),
-                                    isDense: true,
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-                        Container(
-                          height: 52,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: pt.surface,
-                            borderRadius: PayPactRadius.md,
-                            border: Border.all(
-                                color: pt.accent, width: 1.5),
-                            boxShadow: [
-                              BoxShadow(
-                                  color: pt.accentSoft,
-                                  spreadRadius: 3,
-                                  blurRadius: 0)
-                            ],
-                          ),
-                          child: Row(children: [
-                            Icon(Icons.receipt_long_outlined,
-                                size: 18, color: pt.ink2),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextField(
-                                controller: _titleCtrl,
-                                style: PayPactTypography.bodyLg
-                                    .copyWith(
-                                        color: pt.ink,
-                                        fontSize: 15),
-                                decoration: InputDecoration(
-                                  hintText: 'What was it?',
-                                  hintStyle:
-                                      PayPactTypography.bodyLg
-                                          .copyWith(
-                                              color: pt.ink3,
-                                              fontSize: 15),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  filled: false,
-                                  isDense: true,
-                                ),
-                              ),
-                            ),
-                          ]),
-                        ),
-                        const SizedBox(height: 14),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(children: [
-                            for (var i = 0;
-                                i < _cats.length;
-                                i++) ...[
-                              GestureDetector(
-                                onTap: () => setState(() =>
-                                    _selectedCategory =
-                                        _cats[i].catId),
-                                child: _CategoryChip(
-                                  c: _cats[i],
-                                  selected: _selectedCategory ==
-                                      _cats[i].catId,
-                                ),
-                              ),
-                              if (i < _cats.length - 1)
-                                const SizedBox(width: 8),
-                            ],
-                          ]),
-                        ),
-                        const SizedBox(height: 18),
-                        if (parsedAmount > 0)
-                          PpGlassCard(
-                            padding: const EdgeInsets.all(14),
-                            radius: PayPactRadius.md,
-                            child: Row(children: [
-                              Icon(Icons.bolt_rounded,
-                                  color: pt.accent, size: 16),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Split equally among group members · ₹${parsedAmount.toStringAsFixed(2)} total',
-                                  style: PayPactTypography.bodySm
-                                      .copyWith(
-                                          color: pt.ink2,
-                                          height: 1.5),
-                                ),
-                              ),
-                            ]),
-                          ),
-                        const SizedBox(height: 18),
-                        PayPactButton(
-                          onPressed: loading ? null : _save,
-                          label: loading
-                              ? 'Saving…'
-                              : 'Save expense',
-                          variant: PayPactButtonVariant.accent,
-                          size: PayPactButtonSize.large,
-                          isFullWidth: true,
-                          leftIcon: Icons.check_rounded,
-                        ),
-                        const SizedBox(height: 24),
-                      ],
+                    width: 38,
+                    height: 5,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: pt.borderStrong.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(99),
                     ),
                   ),
                 ),
+
+                // Header: Cancel | New expense | Save
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => context.pop(),
+                        child: Text('Cancel',
+                            style: PayPactTypography.bodyMd
+                                .copyWith(color: pt.ink3)),
+                      ),
+                      const Spacer(),
+                      Text('New expense',
+                          style: PayPactTypography.headingMd
+                              .copyWith(color: pt.ink)),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: loading ? null : _save,
+                        child: Text('Save',
+                            style: PayPactTypography.bodyMd.copyWith(
+                              color: loading ? pt.ink3 : pt.accent,
+                              fontWeight: FontWeight.w600,
+                            )),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Amount display
+                Column(
+                  children: [
+                    Text('AMOUNT',
+                        style: PayPactTypography.label
+                            .copyWith(color: pt.ink3, letterSpacing: 1.6)),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: 240,
+                      child: TextField(
+                        controller: _amountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        textAlign: TextAlign.center,
+                        style: PayPactTypography.amountHero
+                            .copyWith(color: pt.accent, fontSize: 52),
+                        decoration: InputDecoration(
+                          hintText: '0',
+                          hintStyle: PayPactTypography.amountHero.copyWith(
+                              color: pt.ink3.withValues(alpha: 0.4),
+                              fontSize: 52),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          prefixText: selectedCur.symbol,
+                          prefixStyle: PayPactTypography.amountHero
+                              .copyWith(color: pt.accent, fontSize: 30),
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    if (parsedAmount > 0 && memberCount > 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _splitType == 'equally'
+                            ? '≈ ${selectedCur.symbol}${(parsedAmount / memberCount).toStringAsFixed(2)} each, equally'
+                            : _splitLabel(),
+                        style: PayPactTypography.bodySm
+                            .copyWith(color: pt.ink3),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    // Currency selector pill
+                    GestureDetector(
+                      onTap: _pickCurrency,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isForeign ? pt.accentSoft : pt.surface,
+                          borderRadius: PayPactRadius.full,
+                          border: Border.all(
+                              color: isForeign ? pt.accent : pt.border),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(_selectedCurrency,
+                                style: PayPactTypography.bodyMd.copyWith(
+                                    color:
+                                        isForeign ? pt.accent : pt.ink,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13)),
+                            const SizedBox(width: 4),
+                            Icon(Icons.unfold_more_rounded,
+                                size: 14,
+                                color: isForeign ? pt.accent : pt.ink3),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (isForeign && parsedAmount > 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Will be converted to $_groupCurrency at live rate',
+                        style: PayPactTypography.bodySm
+                            .copyWith(color: pt.ink3),
+                      ),
+                    ],
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                // Description field
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: TextField(
+                    controller: _titleCtrl,
+                    style: PayPactTypography.bodyLg
+                        .copyWith(color: pt.ink, fontSize: 15),
+                    decoration: InputDecoration(
+                      hintText: 'What was it for?',
+                      hintStyle: PayPactTypography.bodyLg
+                          .copyWith(color: pt.ink3, fontSize: 15),
+                      prefixIcon: Icon(Icons.receipt_long_outlined,
+                          size: 18, color: pt.ink2),
+                      filled: true,
+                      fillColor: pt.surface,
+                      border: OutlineInputBorder(
+                          borderRadius: PayPactRadius.md,
+                          borderSide: BorderSide(color: pt.borderStrong)),
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: PayPactRadius.md,
+                          borderSide: BorderSide(color: pt.borderStrong)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: PayPactRadius.md,
+                          borderSide:
+                              BorderSide(color: pt.accent, width: 1.4)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Category chips
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < _cats.length; i++) ...[
+                        GestureDetector(
+                          onTap: () => setState(
+                              () => _selectedCategory = _cats[i].catId),
+                          child: _CategoryChip(
+                              c: _cats[i],
+                              selected:
+                                  _selectedCategory == _cats[i].catId),
+                        ),
+                        if (i < _cats.length - 1)
+                          const SizedBox(width: 8),
+                      ],
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+                Divider(height: 1, color: pt.border),
+
+                // Group row
+                _InfoRow(
+                  leading: _group != null
+                      ? Text(_group!.emoji,
+                          style: const TextStyle(fontSize: 22))
+                      : Icon(Icons.group_outlined,
+                          color: pt.ink3, size: 22),
+                  label: 'Group',
+                  value: _group?.name ?? 'Loading…',
+                  pt: pt,
+                  onTap: null,
+                ),
+
+                Divider(height: 1, color: pt.border, indent: 56),
+
+                // Paid by row
+                _InfoRow(
+                  leading: _paidByName.isNotEmpty
+                      ? PpAvatar(name: _paidByName, size: 30)
+                      : Icon(Icons.person_outline,
+                          color: pt.ink3, size: 22),
+                  label: 'Paid by',
+                  value: _paidByName.isEmpty ? 'Select' : _paidByName,
+                  pt: pt,
+                  onTap: _pickPaidBy,
+                ),
+
+                Divider(height: 1, color: pt.border, indent: 56),
+
+                // Split row
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: pt.surface,
+                          borderRadius: PayPactRadius.sm,
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(Icons.call_split_rounded,
+                            color: pt.ink2, size: 18),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Split',
+                                style: PayPactTypography.bodySm
+                                    .copyWith(color: pt.ink3)),
+                            Text(_splitLabel(),
+                                style: PayPactTypography.bodyMd.copyWith(
+                                    color: pt.ink,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: _adjustSplit,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: pt.surface,
+                            borderRadius: PayPactRadius.full,
+                            border: Border.all(color: pt.border),
+                          ),
+                          child: Text('Adjust',
+                              style: PayPactTypography.bodyMd.copyWith(
+                                  color: pt.ink,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                Divider(height: 1, color: pt.border),
+                const SizedBox(height: 12),
+
+                // Quick actions
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      _QuickChip(
+                        icon: Icons.calendar_today_rounded,
+                        label: _useYesterday ? 'Yesterday' : 'Today',
+                        active: _useYesterday,
+                        pt: pt,
+                        onTap: () =>
+                            setState(() => _useYesterday = !_useYesterday),
+                      ),
+                      const SizedBox(width: 8),
+                      _QuickChip(
+                        icon: Icons.document_scanner_outlined,
+                        label: 'Scan receipt',
+                        active: false,
+                        pt: pt,
+                        onTap: () => ScaffoldMessenger.of(context)
+                            .showSnackBar(const SnackBar(
+                                content:
+                                    Text('Scan receipt — coming soon'))),
+                      ),
+                      const SizedBox(width: 8),
+                      _QuickChip(
+                        icon: Icons.call_split_rounded,
+                        label: 'Split shortcut',
+                        active: false,
+                        pt: pt,
+                        onTap: _adjustSplit,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Smart split banner
+                if (parsedAmount > 0 && smartText.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: PpGlassCard(
+                      padding: const EdgeInsets.all(12),
+                      radius: PayPactRadius.md,
+                      child: Row(
+                        children: [
+                          Icon(Icons.bolt_rounded,
+                              color: pt.accent, size: 16),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Smart split: $smartText',
+                              style: PayPactTypography.bodySm
+                                  .copyWith(color: pt.ink2, height: 1.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 14),
+
+                // Save button
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: PayPactButton(
+                    onPressed: loading ? null : _save,
+                    label: loading ? 'Saving…' : 'Save expense',
+                    variant: PayPactButtonVariant.accent,
+                    size: PayPactButtonSize.large,
+                    isFullWidth: true,
+                    leftIcon: Icons.check_rounded,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                  child: Container(
+                    color: (isDark ? Colors.black : const Color(0xFF1F1B16))
+                        .withValues(alpha: isDark ? 0.5 : 0.38),
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: sheetContent,
               ),
             ],
           ),
@@ -350,24 +681,623 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
       return;
     }
 
-    final group = await locator<GroupRepository>().getGroup(gid);
-    final members = group?.memberNames ?? {
-      authState.user.id: authState.user.name
-    };
+    final parsedAmount = _parsedAmount;
+    final uiSplits = _buildUiSplits(parsedAmount);
 
     if (!mounted) return;
     context.read<AddExpenseCubit>().saveExpense(
           groupId: gid,
+          groupCurrency: _groupCurrency,
           title: _titleCtrl.text,
-          amount: double.tryParse(_amountCtrl.text) ?? 0,
+          amount: parsedAmount,
+          originalCurrency: _selectedCurrency,
           category: _selectedCategory,
-          paidById: authState.user.id,
-          paidByName: authState.user.name,
-          members: members,
+          paidById: _paidById,
+          paidByName: _paidByName,
+          splits: uiSplits,
           currentUserId: authState.user.id,
         );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Info row (Group / Paid by)
+// ─────────────────────────────────────────────────────────────────────
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.leading,
+    required this.label,
+    required this.value,
+    required this.pt,
+    this.onTap,
+  });
+  final Widget leading;
+  final String label;
+  final String value;
+  final PayPactThemeExtension pt;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: [
+            SizedBox(
+                width: 36,
+                height: 36,
+                child: Center(child: leading)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: PayPactTypography.bodySm
+                          .copyWith(color: pt.ink3)),
+                  Text(value,
+                      style: PayPactTypography.bodyMd.copyWith(
+                          color: pt.ink, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+            if (onTap != null)
+              Icon(Icons.chevron_right_rounded,
+                  color: pt.ink3, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Quick action chip
+// ─────────────────────────────────────────────────────────────────────
+
+class _QuickChip extends StatelessWidget {
+  const _QuickChip({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.pt,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final bool active;
+  final PayPactThemeExtension pt;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? pt.accentSoft : pt.surface,
+          borderRadius: PayPactRadius.full,
+          border:
+              Border.all(color: active ? pt.accent : pt.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 14,
+                color: active ? pt.accent : pt.ink3),
+            const SizedBox(width: 6),
+            Text(label,
+                style: PayPactTypography.bodyMd.copyWith(
+                  color: active ? pt.accent : pt.ink2,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Paid by picker sheet
+// ─────────────────────────────────────────────────────────────────────
+
+class _PaidByPickerSheet extends StatelessWidget {
+  const _PaidByPickerSheet({
+    required this.members,
+    required this.selectedId,
+    required this.onPick,
+  });
+  final Map<String, String> members;
+  final String selectedId;
+  final void Function(String id, String name) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 32),
+      decoration: BoxDecoration(
+        color: pt.bg,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 38,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 18),
+              decoration: BoxDecoration(
+                color: pt.borderStrong.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          Text('Who paid?',
+              style:
+                  PayPactTypography.headingMd.copyWith(color: pt.ink)),
+          const SizedBox(height: 16),
+          ...members.entries.map((e) {
+            final isSelected = e.key == selectedId;
+            return GestureDetector(
+              onTap: () {
+                onPick(e.key, e.value);
+                Navigator.pop(context);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? pt.accentSoft : pt.surface,
+                  borderRadius: PayPactRadius.md,
+                  border: Border.all(
+                      color: isSelected ? pt.accent : pt.border),
+                ),
+                child: Row(
+                  children: [
+                    PpAvatar(name: e.value, size: 32),
+                    const SizedBox(width: 14),
+                    Expanded(
+                        child: Text(e.value,
+                            style: PayPactTypography.bodyMd.copyWith(
+                                color: pt.ink,
+                                fontWeight: FontWeight.w600))),
+                    if (isSelected)
+                      Icon(Icons.check_rounded,
+                          color: pt.accent, size: 18),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Split adjust sheet
+// ─────────────────────────────────────────────────────────────────────
+
+class _SplitAdjustSheet extends StatefulWidget {
+  const _SplitAdjustSheet({
+    required this.members,
+    required this.currentSplitType,
+    required this.currentCustomSplits,
+    required this.totalAmount,
+    required this.currency,
+  });
+  final Map<String, String> members;
+  final String currentSplitType;
+  final Map<String, double> currentCustomSplits;
+  final double totalAmount;
+  final String currency;
+
+  @override
+  State<_SplitAdjustSheet> createState() => _SplitAdjustSheetState();
+}
+
+class _SplitAdjustSheetState extends State<_SplitAdjustSheet> {
+  late String _splitType;
+  late Map<String, TextEditingController> _controllers;
+
+  static const _types = ['equally', 'exact', 'percent', 'shares'];
+  static const _typeLabels = ['Equally', 'Exact', '%', 'Shares'];
+  static const _typeIcons = [
+    Icons.horizontal_distribute,
+    Icons.attach_money_rounded,
+    Icons.percent_rounded,
+    Icons.stacked_bar_chart_rounded,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _splitType = widget.currentSplitType;
+    _controllers = {
+      for (final e in widget.members.entries)
+        e.key: TextEditingController(
+          text: widget.currentCustomSplits[e.key]?.toString() ?? '',
+        ),
+    };
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Map<String, double> _buildCustomSplits() => {
+        for (final e in _controllers.entries)
+          e.key: double.tryParse(e.value.text) ??
+              (_splitType == 'shares' ? 1 : 0),
+      };
+
+  String? _validate() {
+    if (_splitType == 'equally') return null;
+    final values =
+        _controllers.values.map((c) => double.tryParse(c.text) ?? 0);
+    final sum = values.fold(0.0, (a, b) => a + b);
+    if (_splitType == 'exact') {
+      if ((sum - widget.totalAmount).abs() > 0.01) {
+        final cur = currencyOf(widget.currency);
+        return 'Total must equal ${cur.symbol}${widget.totalAmount.toStringAsFixed(2)}. Currently: ${cur.symbol}${sum.toStringAsFixed(2)}';
+      }
+    } else if (_splitType == 'percent') {
+      if ((sum - 100).abs() > 0.01) {
+        return 'Percentages must sum to 100%. Currently: ${sum.toStringAsFixed(1)}%';
+      }
+    }
+    return null;
+  }
+
+  void _done() {
+    final error = _validate();
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+    Navigator.pop(context,
+        (splitType: _splitType, customSplits: _buildCustomSplits()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    final cur = currencyOf(widget.currency);
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          24, 14, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+      decoration: BoxDecoration(
+        color: pt.bg,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 38,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: pt.borderStrong.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Text('Split type',
+                  style: PayPactTypography.headingMd
+                      .copyWith(color: pt.ink)),
+              const Spacer(),
+              GestureDetector(
+                onTap: _done,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: pt.accent,
+                    borderRadius: PayPactRadius.full,
+                  ),
+                  child: Text('Done',
+                      style: PayPactTypography.bodyMd.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Split type tabs
+          Row(
+            children: [
+              for (var i = 0; i < _types.length; i++) ...[
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => _splitType = _types[i]),
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _splitType == _types[i]
+                            ? pt.accent
+                            : pt.surface,
+                        borderRadius: PayPactRadius.md,
+                        border: Border.all(
+                            color: _splitType == _types[i]
+                                ? pt.accent
+                                : pt.border),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(_typeIcons[i],
+                              size: 18,
+                              color: _splitType == _types[i]
+                                  ? Colors.white
+                                  : pt.ink2),
+                          const SizedBox(height: 4),
+                          Text(_typeLabels[i],
+                              style: PayPactTypography.bodySm.copyWith(
+                                color: _splitType == _types[i]
+                                    ? Colors.white
+                                    : pt.ink2,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              )),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (i < _types.length - 1) const SizedBox(width: 8),
+              ],
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Member rows
+          if (_splitType == 'equally') ...[
+            ...widget.members.entries.map((e) {
+              final each = widget.members.isNotEmpty && widget.totalAmount > 0
+                  ? widget.totalAmount / widget.members.length
+                  : 0.0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    PpAvatar(name: e.value, size: 32),
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: Text(e.value,
+                            style: PayPactTypography.bodyMd
+                                .copyWith(color: pt.ink))),
+                    Text(
+                        '${cur.symbol}${each.toStringAsFixed(2)}',
+                        style: PayPactTypography.bodyMd.copyWith(
+                            color: pt.ink2,
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              );
+            }),
+          ] else ...[
+            ...widget.members.entries.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      PpAvatar(name: e.value, size: 32),
+                      const SizedBox(width: 12),
+                      Expanded(
+                          child: Text(e.value,
+                              style: PayPactTypography.bodyMd
+                                  .copyWith(color: pt.ink))),
+                      SizedBox(
+                        width: 110,
+                        child: TextField(
+                          controller: _controllers[e.key],
+                          keyboardType:
+                              const TextInputType.numberWithOptions(
+                                  decimal: true),
+                          textAlign: TextAlign.right,
+                          style: PayPactTypography.bodyMd
+                              .copyWith(color: pt.ink),
+                          decoration: InputDecoration(
+                            hintText: _splitType == 'shares'
+                                ? '1'
+                                : '0',
+                            hintStyle: PayPactTypography.bodyMd
+                                .copyWith(color: pt.ink3),
+                            suffixText:
+                                _splitType == 'percent' ? '%' : '',
+                            prefixText: _splitType == 'exact'
+                                ? cur.symbol
+                                : '',
+                            prefixStyle: PayPactTypography.bodyMd
+                                .copyWith(color: pt.ink2),
+                            filled: true,
+                            fillColor: pt.surface,
+                            border: OutlineInputBorder(
+                                borderRadius: PayPactRadius.sm,
+                                borderSide:
+                                    BorderSide(color: pt.border)),
+                            enabledBorder: OutlineInputBorder(
+                                borderRadius: PayPactRadius.sm,
+                                borderSide:
+                                    BorderSide(color: pt.border)),
+                            focusedBorder: OutlineInputBorder(
+                                borderRadius: PayPactRadius.sm,
+                                borderSide: BorderSide(
+                                    color: pt.accent, width: 1.4)),
+                            contentPadding:
+                                const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 10),
+                            isDense: true,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+
+            // Total summary for exact / percent
+            if (_splitType == 'exact' || _splitType == 'percent') ...[
+              const SizedBox(height: 4),
+              Divider(color: pt.border),
+              const SizedBox(height: 4),
+              Builder(builder: (context) {
+                final vals = _controllers.values
+                    .map((c) => double.tryParse(c.text) ?? 0);
+                final sum = vals.fold(0.0, (a, b) => a + b);
+                final isValid = _splitType == 'exact'
+                    ? (sum - widget.totalAmount).abs() < 0.01
+                    : (sum - 100).abs() < 0.01;
+                return Row(
+                  children: [
+                    Text('Total',
+                        style: PayPactTypography.bodyMd
+                            .copyWith(color: pt.ink3)),
+                    const Spacer(),
+                    Text(
+                      _splitType == 'exact'
+                          ? '${cur.symbol}${sum.toStringAsFixed(2)} / ${cur.symbol}${widget.totalAmount.toStringAsFixed(2)}'
+                          : '${sum.toStringAsFixed(1)}% / 100%',
+                      style: PayPactTypography.bodyMd.copyWith(
+                          color: isValid ? pt.accent : Colors.red,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                );
+              }),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Currency picker sheet
+// ─────────────────────────────────────────────────────────────────────
+
+class _CurrencyPickerSheet extends StatelessWidget {
+  const _CurrencyPickerSheet(
+      {required this.selected, required this.onPick});
+  final String selected;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 32),
+      decoration: BoxDecoration(
+        color: pt.bg,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 38,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 18),
+              decoration: BoxDecoration(
+                color: pt.borderStrong.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          Text('Expense currency',
+              style:
+                  PayPactTypography.headingMd.copyWith(color: pt.ink)),
+          const SizedBox(height: 4),
+          Text('Converted to group base currency on save',
+              style:
+                  PayPactTypography.bodySm.copyWith(color: pt.ink3)),
+          const SizedBox(height: 16),
+          ...kCurrencies.map((c) {
+            final isSelected = c.code == selected;
+            return GestureDetector(
+              onTap: () {
+                onPick(c.code);
+                Navigator.pop(context);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 13),
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? pt.accentSoft : pt.surface,
+                  borderRadius: PayPactRadius.md,
+                  border: Border.all(
+                      color: isSelected ? pt.accent : pt.border),
+                ),
+                child: Row(children: [
+                  Text(c.symbol,
+                      style: PayPactTypography.amountMd
+                          .copyWith(color: pt.ink, fontSize: 18)),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(c.code,
+                            style: PayPactTypography.bodyMd.copyWith(
+                                color: pt.ink,
+                                fontWeight: FontWeight.w600)),
+                        Text(c.name,
+                            style: PayPactTypography.bodySm
+                                .copyWith(color: pt.ink3)),
+                      ],
+                    ),
+                  ),
+                  if (isSelected)
+                    Icon(Icons.check_rounded,
+                        color: pt.accent, size: 18),
+                ]),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Category chip
+// ─────────────────────────────────────────────────────────────────────
 
 class _CatChoice {
   final String label;
@@ -387,15 +1317,13 @@ class _CategoryChip extends StatelessWidget {
     final pt = context.pt;
     final tones = PpCategoryDisc.tone(context, c.cat);
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 14, vertical: 8),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color:
-            selected ? tones[0] : Colors.transparent,
+        color: selected ? tones[0] : Colors.transparent,
         borderRadius: PayPactRadius.full,
         border: Border.all(
-            color:
-                selected ? Colors.transparent : pt.border),
+            color: selected ? Colors.transparent : pt.border),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(c.emoji, style: const TextStyle(fontSize: 14)),

@@ -136,13 +136,16 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.addMembers,
-      pageBuilder: (context, state) => _slideRight(
-        key: state.pageKey,
-        child: AddMembersScreen(
-          groupId:
-              (state.extra as Map<String, dynamic>?)?['groupId'] as String?,
-        ),
-      ),
+      pageBuilder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        return _slideRight(
+          key: state.pageKey,
+          child: AddMembersScreen(
+            groupId: extra?['groupId'] as String?,
+            fromCreate: extra?['fromCreate'] as bool? ?? false,
+          ),
+        );
+      },
     ),
     GoRoute(
       path: AppRoutes.groups,
@@ -241,35 +244,58 @@ final appRouter = GoRouter(
             ),
             GoRoute(
               path: 'settle',
-              pageBuilder: (context, state) => _slideUpModal(
-                key: state.pageKey,
-                child: SettleUpScreen(
-                  groupId: state.pathParameters['groupId']!,
-                ),
-              ),
+              pageBuilder: (context, state) {
+                final extra = state.extra as Map<String, dynamic>?;
+                final groupId = state.pathParameters['groupId']!;
+                return _slideUpModal(
+                  key: state.pageKey,
+                  child: SettleUpScreen(
+                    groupId: groupId,
+                    groupName: extra?['groupName'] as String? ?? '',
+                    toUserId: extra?['toUserId'] as String? ?? '',
+                    toUserName: extra?['toUserName'] as String? ?? '',
+                    suggestedAmount:
+                        (extra?['suggestedAmount'] as num?)?.toDouble() ?? 0,
+                    currency: extra?['currency'] as String? ?? '₹',
+                  ),
+                );
+              },
             ),
             GoRoute(
               path: 'settle-success',
-              pageBuilder: (context, state) => CustomTransitionPage(
-                key: state.pageKey,
-                transitionDuration: const Duration(milliseconds: 350),
-                reverseTransitionDuration: const Duration(milliseconds: 250),
-                transitionsBuilder: (_, animation, __, child) => FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(
-                    scale: Tween<double>(begin: 0.92, end: 1.0).animate(
-                      CurvedAnimation(
-                        parent: animation,
-                        curve: PayPactMotion.easeOut,
+              pageBuilder: (context, state) {
+                final extra = state.extra as Map<String, dynamic>?;
+                final groupId = state.pathParameters['groupId']!;
+                return CustomTransitionPage(
+                  key: state.pageKey,
+                  transitionDuration: const Duration(milliseconds: 350),
+                  reverseTransitionDuration:
+                      const Duration(milliseconds: 250),
+                  transitionsBuilder: (_, animation, __, child) =>
+                      FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(
+                      scale: Tween<double>(begin: 0.92, end: 1.0).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: PayPactMotion.easeOut,
+                        ),
                       ),
+                      child: child,
                     ),
-                    child: child,
                   ),
-                ),
-                child: SettleSuccessScreen(
-                  groupId: state.pathParameters['groupId']!,
-                ),
-              ),
+                  child: SettleSuccessScreen(
+                    groupId: groupId,
+                    fromUserName:
+                        extra?['fromUserName'] as String? ?? 'You',
+                    toUserName: extra?['toUserName'] as String? ?? '',
+                    amount:
+                        (extra?['amount'] as num?)?.toDouble() ?? 0,
+                    receiptId: extra?['receiptId'] as String? ?? '',
+                    currency: extra?['currency'] as String? ?? '₹',
+                  ),
+                );
+              },
             ),
             GoRoute(
               path: 'settings',
@@ -291,7 +317,7 @@ final appRouter = GoRouter(
             child: ExpenseDetailScreen(
               expenseId: state.pathParameters['expenseId']!,
               groupId:
-                  (state.extra as Map<String, dynamic>?)?['groupId'] as String?,
+                  ((state.extra as Map<String, dynamic>?)?['groupId'] as String?) ?? '',
             ),
             forward: const Duration(milliseconds: 280),
             reverse: const Duration(milliseconds: 230),

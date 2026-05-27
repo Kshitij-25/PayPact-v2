@@ -7,6 +7,9 @@ class ExpenseModel extends ExpenseEntity {
     required super.groupId,
     required super.title,
     required super.amount,
+    required super.originalAmount,
+    required super.originalCurrency,
+    required super.exchangeRate,
     required super.category,
     required super.paidById,
     required super.paidByName,
@@ -27,16 +30,23 @@ class ExpenseModel extends ExpenseEntity {
       );
     }).toList();
 
+    final baseAmount = (data['amount'] as num?)?.toDouble() ?? 0;
+
     return ExpenseModel(
       id: doc.id,
       groupId: groupId,
       title: data['title'] as String? ?? '',
-      amount: (data['amount'] as num?)?.toDouble() ?? 0,
+      amount: baseAmount,
+      originalAmount:
+          (data['originalAmount'] as num?)?.toDouble() ?? baseAmount,
+      originalCurrency: data['originalCurrency'] as String? ?? 'INR',
+      exchangeRate: (data['exchangeRate'] as num?)?.toDouble() ?? 1.0,
       category: data['category'] as String? ?? 'other',
       paidById: data['paidById'] as String? ?? '',
       paidByName: data['paidByName'] as String? ?? '',
       splits: splits,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt:
+          (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdById: data['createdById'] as String? ?? '',
     );
   }
@@ -44,6 +54,9 @@ class ExpenseModel extends ExpenseEntity {
   Map<String, dynamic> toMap() => {
         'title': title,
         'amount': amount,
+        'originalAmount': originalAmount,
+        'originalCurrency': originalCurrency,
+        'exchangeRate': exchangeRate,
         'category': category,
         'paidById': paidById,
         'paidByName': paidByName,

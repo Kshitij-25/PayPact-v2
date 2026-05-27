@@ -53,7 +53,11 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
   void _syncFromGroup(GroupEntity g) {
     if (_emoji.isEmpty) _emoji = g.emoji;
     if (_category.isEmpty) _category = g.category;
-    if (_nameCtrl.text.isEmpty) _nameCtrl.text = g.name;
+    if (_nameCtrl.text.isEmpty) {
+      _nameCtrl.removeListener(_onEdit);
+      _nameCtrl.text = g.name;
+      _nameCtrl.addListener(_onEdit);
+    }
   }
 
   @override

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:paypact/core/navigation/app_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
@@ -11,6 +13,7 @@ import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/group/presentation/cubit/create_group_cubit.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CreateGroupScreen extends StatelessWidget {
   const CreateGroupScreen({super.key});
@@ -35,6 +38,7 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
   final _nameCtrl = TextEditingController();
   String _selectedCategory = 'trip';
   String _selectedEmoji = '🏖';
+  String _selectedCurrency = kDefaultCurrency;
 
   static const _categories = [
     _Cat('trip', 'Trip', '🏖'),
@@ -46,21 +50,45 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    final prefs = locator<SharedPreferences>();
+    _selectedCurrency =
+        prefs.getString(kPrefCurrencyKey) ?? kDefaultCurrency;
+  }
+
+  @override
   void dispose() {
     _nameCtrl.dispose();
     super.dispose();
+  }
+
+  void _pickCurrency() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CurrencyPickerSheet(
+        selected: _selectedCurrency,
+        onPick: (code) => setState(() => _selectedCurrency = code),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
     final tripTone = PpCategoryDisc.tone(context, PpCategory.trip);
+    final cur = currencyOf(_selectedCurrency);
 
     return BlocConsumer<CreateGroupCubit, CreateGroupState>(
       listener: (context, state) {
         if (state is CreateGroupSuccess) {
           context.pop();
-          context.push('/group/${state.group.id}');
+          context.push(
+            AppRoutes.addMembers,
+            extra: {'groupId': state.group.id, 'fromCreate': true},
+          );
         } else if (state is CreateGroupError) {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text(state.message)));
@@ -85,18 +113,27 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
                             icon: Icons.close_rounded,
                             onTap: () => context.pop()),
                         const Spacer(),
-                        Text('New group',
-                            style: PayPactTypography.bodyMd.copyWith(
-                                color: pt.ink,
-                                fontWeight: FontWeight.w600)),
+                        Column(
+                          children: [
+                            Text('New group',
+                                style: PayPactTypography.bodyMd.copyWith(
+                                    color: pt.ink,
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 3),
+                            Text('STEP 1 OF 2',
+                                style: PayPactTypography.label.copyWith(
+                                    color: pt.ink3,
+                                    letterSpacing: 1.4,
+                                    fontSize: 10)),
+                          ],
+                        ),
                         const Spacer(),
                         const SizedBox(width: 40),
                       ]),
                     ),
                     Expanded(
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(
-                            28, 18, 28, 120),
+                        padding: const EdgeInsets.fromLTRB(28, 18, 28, 120),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -111,63 +148,56 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
                             Container(
                               height: 140,
                               decoration: BoxDecoration(
-                                borderRadius:
-                                    BorderRadius.circular(22),
+                                borderRadius: BorderRadius.circular(22),
                                 gradient: LinearGradient(
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
-                                  colors: [
-                                    pt.accentSoft,
-                                    tripTone[0]
-                                  ],
+                                  colors: [pt.accentSoft, tripTone[0]],
                                 ),
                               ),
                               child: Center(
                                 child: Text(_selectedEmoji,
-                                    style: const TextStyle(
-                                        fontSize: 54)),
+                                    style: const TextStyle(fontSize: 54)),
                               ),
                             ),
                             const SizedBox(height: 24),
                             Text('GROUP NAME',
-                                style: PayPactTypography.label
-                                    .copyWith(
-                                        color: pt.ink3,
-                                        letterSpacing: 1.5)),
+                                style: PayPactTypography.label.copyWith(
+                                    color: pt.ink3, letterSpacing: 1.5)),
                             const SizedBox(height: 8),
-                            Container(
-                              height: 56,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16),
-                              decoration: BoxDecoration(
-                                color: pt.surface,
-                                borderRadius: PayPactRadius.md,
-                                border: Border.all(color: pt.border),
-                                boxShadow: pt.shadowSm,
-                              ),
-                              child: TextField(
-                                controller: _nameCtrl,
-                                style: PayPactTypography.headingLg
-                                    .copyWith(color: pt.ink),
-                                decoration: InputDecoration(
-                                  hintText: 'e.g. Goa Trip',
-                                  hintStyle:
-                                      PayPactTypography.headingLg
-                                          .copyWith(color: pt.ink3),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  filled: false,
-                                  isDense: true,
+                            TextField(
+                              controller: _nameCtrl,
+                              style: PayPactTypography.headingLg
+                                  .copyWith(color: pt.ink),
+                              decoration: InputDecoration(
+                                hintText: 'e.g. Goa Trip',
+                                hintStyle: PayPactTypography.headingLg
+                                    .copyWith(color: pt.ink3),
+                                filled: true,
+                                fillColor: pt.surface,
+                                border: OutlineInputBorder(
+                                  borderRadius: PayPactRadius.md,
+                                  borderSide:
+                                      BorderSide(color: pt.borderStrong),
                                 ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: PayPactRadius.md,
+                                  borderSide:
+                                      BorderSide(color: pt.borderStrong),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: PayPactRadius.md,
+                                  borderSide: BorderSide(
+                                      color: pt.accent, width: 1.4),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 16),
                               ),
                             ),
                             const SizedBox(height: 20),
                             Text('CATEGORY',
-                                style: PayPactTypography.label
-                                    .copyWith(
-                                        color: pt.ink3,
-                                        letterSpacing: 1.5)),
+                                style: PayPactTypography.label.copyWith(
+                                    color: pt.ink3, letterSpacing: 1.5)),
                             const SizedBox(height: 10),
                             Wrap(
                               spacing: 8,
@@ -188,45 +218,49 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
                             ),
                             const SizedBox(height: 24),
                             Text('CURRENCY',
-                                style: PayPactTypography.label
-                                    .copyWith(
-                                        color: pt.ink3,
-                                        letterSpacing: 1.5)),
+                                style: PayPactTypography.label.copyWith(
+                                    color: pt.ink3, letterSpacing: 1.5)),
                             const SizedBox(height: 8),
-                            PayPactCard(
-                              padding: const EdgeInsets.all(14),
-                              child: Row(children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: pt.surfaceAlt,
-                                    borderRadius: PayPactRadius.sm,
+                            GestureDetector(
+                              onTap: _pickCurrency,
+                              child: PayPactCard(
+                                padding: const EdgeInsets.all(14),
+                                child: Row(children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: pt.surfaceAlt,
+                                      borderRadius: PayPactRadius.sm,
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(cur.symbol,
+                                        style: PayPactTypography.headingMd
+                                            .copyWith(color: pt.ink)),
                                   ),
-                                  alignment: Alignment.center,
-                                  child: Text('₹',
-                                      style: PayPactTypography.headingMd
-                                          .copyWith(color: pt.ink)),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text('Indian Rupee',
-                                          style: PayPactTypography.bodyMd
-                                              .copyWith(
-                                                  color: pt.ink,
-                                                  fontWeight:
-                                                      FontWeight.w600)),
-                                      Text('INR · ₹ symbol',
-                                          style: PayPactTypography.bodySm
-                                              .copyWith(color: pt.ink3)),
-                                    ],
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(cur.name,
+                                            style: PayPactTypography.bodyMd
+                                                .copyWith(
+                                                    color: pt.ink,
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                        Text(
+                                            '${cur.code} · ${cur.symbol} symbol',
+                                            style: PayPactTypography.bodySm
+                                                .copyWith(color: pt.ink3)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ]),
+                                  Icon(Icons.chevron_right_rounded,
+                                      color: pt.ink3),
+                                ]),
+                              ),
                             ),
                           ],
                         ),
@@ -274,10 +308,94 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
           name: _nameCtrl.text,
           emoji: _selectedEmoji,
           category: _selectedCategory,
-          currency: 'INR',
+          currency: _selectedCurrency,
           userId: authState.user.id,
           userName: authState.user.name,
         );
+  }
+}
+
+class _CurrencyPickerSheet extends StatelessWidget {
+  const _CurrencyPickerSheet(
+      {required this.selected, required this.onPick});
+  final String selected;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 32),
+      decoration: BoxDecoration(
+        color: pt.bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 38,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 18),
+              decoration: BoxDecoration(
+                color: pt.borderStrong.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          Text('Group currency',
+              style: PayPactTypography.headingMd.copyWith(color: pt.ink)),
+          const SizedBox(height: 4),
+          Text('All expenses are tracked in this currency',
+              style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
+          const SizedBox(height: 16),
+          ...kCurrencies.map((c) {
+            final isSelected = c.code == selected;
+            return GestureDetector(
+              onTap: () {
+                onPick(c.code);
+                Navigator.pop(context);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 13),
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? pt.accentSoft : pt.surface,
+                  borderRadius: PayPactRadius.md,
+                  border: Border.all(
+                      color: isSelected ? pt.accent : pt.border),
+                ),
+                child: Row(children: [
+                  Text(c.symbol,
+                      style: PayPactTypography.amountMd
+                          .copyWith(color: pt.ink, fontSize: 18)),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(c.code,
+                            style: PayPactTypography.bodyMd.copyWith(
+                                color: pt.ink,
+                                fontWeight: FontWeight.w600)),
+                        Text(c.name,
+                            style: PayPactTypography.bodySm
+                                .copyWith(color: pt.ink3)),
+                      ],
+                    ),
+                  ),
+                  if (isSelected)
+                    Icon(Icons.check_rounded, color: pt.accent, size: 18),
+                ]),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 }
 
@@ -302,8 +420,7 @@ class _CatChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: selected ? pt.accent : pt.surface,
         borderRadius: PayPactRadius.full,
-        border: Border.all(
-            color: selected ? pt.accent : pt.border),
+        border: Border.all(color: selected ? pt.accent : pt.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

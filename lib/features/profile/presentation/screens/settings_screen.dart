@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/theme/theme_cubit.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -33,6 +34,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'digest': false,
   };
 
+  String _defaultCurrency = kDefaultCurrency;
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +52,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'expenses': prefs.getBool(_prefsKeys['expenses']!) ?? true,
         'digest': prefs.getBool(_prefsKeys['digest']!) ?? false,
       };
+      _defaultCurrency =
+          prefs.getString(kPrefCurrencyKey) ?? kDefaultCurrency;
     });
   }
 
@@ -56,6 +61,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = locator<SharedPreferences>();
     await prefs.setBool(_prefsKeys[key]!, value);
     setState(() => _notifState[key] = value);
+  }
+
+  Future<void> _setCurrency(String code) async {
+    final prefs = locator<SharedPreferences>();
+    await prefs.setString(kPrefCurrencyKey, code);
+    setState(() => _defaultCurrency = code);
+  }
+
+  void _pickCurrency() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CurrencyPickerSheet(
+        selected: _defaultCurrency,
+        onPick: _setCurrency,
+      ),
+    );
   }
 
   @override
@@ -170,6 +193,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ]),
                           ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Default currency
+                      PpSectionLabel(
+                          label: 'CURRENCY', padding: EdgeInsets.zero),
+                      const SizedBox(height: 10),
+                      GestureDetector(
+                        onTap: _pickCurrency,
+                        child: PayPactCard(
+                          padding: EdgeInsets.zero,
+                          child: _RowControl(
+                            icon: Icons.currency_exchange_rounded,
+                            label: 'Default currency',
+                            trailing: _ValueChevron(
+                                '${currencyOf(_defaultCurrency).symbol} $_defaultCurrency'),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+                        child: Text(
+                          'Applies to new groups only. Existing groups keep their currency.',
+                          style: PayPactTypography.bodySm
+                              .copyWith(color: pt.ink3),
                         ),
                       ),
                       const SizedBox(height: 18),
@@ -436,6 +485,93 @@ class _ValueChevron extends StatelessWidget {
           style: PayPactTypography.bodyMd.copyWith(color: pt.ink3)),
       Icon(Icons.chevron_right_rounded, color: pt.ink3),
     ]);
+  }
+}
+
+class _CurrencyPickerSheet extends StatelessWidget {
+  const _CurrencyPickerSheet(
+      {required this.selected, required this.onPick});
+  final String selected;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 32),
+      decoration: BoxDecoration(
+        color: pt.bg,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 38,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 18),
+              decoration: BoxDecoration(
+                color: pt.borderStrong.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          Text('Default currency',
+              style:
+                  PayPactTypography.headingMd.copyWith(color: pt.ink)),
+          const SizedBox(height: 4),
+          Text('Used as the base currency for new groups',
+              style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
+          const SizedBox(height: 16),
+          ...kCurrencies.map((c) {
+            final isSelected = c.code == selected;
+            return GestureDetector(
+              onTap: () {
+                onPick(c.code);
+                Navigator.pop(context);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 13),
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? pt.accentSoft : pt.surface,
+                  borderRadius: PayPactRadius.md,
+                  border: Border.all(
+                      color: isSelected ? pt.accent : pt.border),
+                ),
+                child: Row(children: [
+                  Text(c.symbol,
+                      style: PayPactTypography.amountMd
+                          .copyWith(color: pt.ink, fontSize: 18)),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(c.code,
+                            style: PayPactTypography.bodyMd.copyWith(
+                                color: pt.ink,
+                                fontWeight: FontWeight.w600)),
+                        Text(c.name,
+                            style: PayPactTypography.bodySm
+                                .copyWith(color: pt.ink3)),
+                      ],
+                    ),
+                  ),
+                  if (isSelected)
+                    Icon(Icons.check_rounded,
+                        color: pt.accent, size: 18),
+                ]),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 }
 

@@ -295,39 +295,33 @@ class _InputField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
-    return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: pt.surface,
-        border: Border.all(color: pt.border),
-        borderRadius: PayPactRadius.md,
-        boxShadow: pt.shadowSm,
-      ),
-      child: Row(children: [
-        Icon(icon, color: pt.ink3, size: 18),
-        const SizedBox(width: 10),
-        Expanded(
-          child: TextField(
-            controller: controller,
-            obscureText: obscure,
-            keyboardType: keyboardType,
-            style:
-                PayPactTypography.bodyLg.copyWith(color: pt.ink, fontSize: 15),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: PayPactTypography.bodyLg
-                  .copyWith(color: pt.ink3, fontSize: 15),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              filled: false,
-              isDense: true,
-            ),
-          ),
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      style: PayPactTypography.bodyLg.copyWith(color: pt.ink, fontSize: 15),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: PayPactTypography.bodyLg.copyWith(color: pt.ink3, fontSize: 15),
+        prefixIcon: Icon(icon, color: pt.ink3, size: 18),
+        suffixIcon: suffix != null ? Padding(padding: const EdgeInsets.only(right: 12), child: suffix) : null,
+        suffixIconConstraints: const BoxConstraints(),
+        filled: true,
+        fillColor: pt.surface,
+        border: OutlineInputBorder(
+          borderRadius: PayPactRadius.md,
+          borderSide: BorderSide(color: pt.borderStrong),
         ),
-        if (suffix != null) suffix!,
-      ]),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: PayPactRadius.md,
+          borderSide: BorderSide(color: pt.borderStrong),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: PayPactRadius.md,
+          borderSide: BorderSide(color: pt.accent, width: 1.4),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
     );
   }
 }

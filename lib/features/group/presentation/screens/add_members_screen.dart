@@ -9,14 +9,14 @@ import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/spacing.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
-import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/group/presentation/cubit/add_members_cubit.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
 class AddMembersScreen extends StatefulWidget {
   final String? groupId;
-  const AddMembersScreen({super.key, this.groupId});
+  final bool fromCreate;
+  const AddMembersScreen({super.key, this.groupId, this.fromCreate = false});
 
   @override
   State<AddMembersScreen> createState() => _AddMembersScreenState();
@@ -26,19 +26,61 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
   final _searchCtrl = TextEditingController();
   final Set<String> _selectedIds = {};
   final Map<String, UserResult> _selectedUsers = {};
-  GroupEntity? _group;
+  String? _groupName;
+  List<_CircleUser> _circleUsers = [];
 
   @override
   void initState() {
     super.initState();
-    _loadGroup();
+    _loadGroupAndCircle();
   }
 
-  Future<void> _loadGroup() async {
-    if (widget.groupId == null) return;
-    final group =
-        await locator<GroupRepository>().getGroup(widget.groupId!);
-    if (mounted) setState(() => _group = group);
+  Future<void> _loadGroupAndCircle() async {
+    final authState = locator<AuthCubit>().state;
+    final currentUserId =
+        authState is AuthAuthenticated ? authState.user.id : null;
+    if (currentUserId == null) return;
+
+    if (widget.groupId != null) {
+      final group =
+          await locator<GroupRepository>().getGroup(widget.groupId!);
+      if (mounted) setState(() => _groupName = group?.name);
+    }
+
+    // Build circle from existing groups (no extra Firestore calls — memberNames already has names)
+    final groups = await locator<GroupRepository>()
+        .watchUserGroups(currentUserId)
+        .first;
+
+    final seen = <String>{currentUserId};
+    final sharedGroupCount = <String, int>{};
+    for (final g in groups) {
+      for (final id in g.memberIds) {
+        if (!seen.contains(id)) {
+          sharedGroupCount[id] = (sharedGroupCount[id] ?? 0) + 1;
+        } else if (id != currentUserId) {
+          sharedGroupCount[id] = (sharedGroupCount[id] ?? 0) + 1;
+        }
+      }
+      seen.addAll(g.memberIds);
+    }
+
+    final circle = <_CircleUser>[];
+    for (final g in groups) {
+      for (final entry in g.memberNames.entries) {
+        if (entry.key == currentUserId) continue;
+        if (circle.any((c) => c.id == entry.key)) continue;
+        circle.add(_CircleUser(
+          id: entry.key,
+          name: entry.value,
+          sharedGroups: sharedGroupCount[entry.key] ?? 1,
+        ));
+      }
+    }
+    // Sort by most shared groups first
+    circle.sort((a, b) => b.sharedGroups.compareTo(a.sharedGroups));
+
+    if (mounted) setState(() => _circleUsers = circle);
   }
 
   @override
@@ -47,8 +89,15 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
     super.dispose();
   }
 
-  Set<String> get _existingIds =>
-      Set<String>.from(_group?.memberIds ?? []);
+  Set<String> get _existingIds => <String>{};
+
+  void _goToGroup() {
+    if (widget.groupId != null) {
+      context.go('/group/${widget.groupId}');
+    } else {
+      context.pop();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,15 +110,20 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
       create: (_) => AddMembersCubit(
         locator<GroupRepository>(),
         locator(),
+        locator(),
       ),
       child: Builder(builder: (ctx) {
         return BlocListener<AddMembersCubit, AddMembersState>(
           listener: (context, state) {
             if (state is AddMembersDone) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Members added!')),
-              );
-              context.pop();
+              if (widget.fromCreate) {
+                _goToGroup();
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Members added!')),
+                );
+                context.pop();
+              }
             } else if (state is AddMembersError) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text(state.message)),
@@ -84,26 +138,47 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
                 SafeArea(
                   child: Column(
                     children: [
+                      // Header
                       Padding(
                         padding:
                             const EdgeInsets.fromLTRB(20, 10, 20, 14),
                         child: Row(children: [
                           PpGlassIconButton(
                             icon: Icons.arrow_back_rounded,
-                            onTap: () => context.pop(),
+                            onTap: () => widget.fromCreate
+                                ? _goToGroup()
+                                : context.pop(),
                           ),
                           const Spacer(),
-                          Text('Add members',
-                              style: PayPactTypography.bodyMd.copyWith(
-                                  color: pt.ink,
-                                  fontWeight: FontWeight.w600)),
+                          Column(
+                            children: [
+                              Text('Add members',
+                                  style: PayPactTypography.bodyMd.copyWith(
+                                      color: pt.ink,
+                                      fontWeight: FontWeight.w600)),
+                              if (widget.fromCreate) ...[
+                                const SizedBox(height: 3),
+                                Text('STEP 2 OF 2',
+                                    style: PayPactTypography.label.copyWith(
+                                        color: pt.ink3,
+                                        letterSpacing: 1.4,
+                                        fontSize: 10)),
+                              ],
+                            ],
+                          ),
                           const Spacer(),
-                          if (_group != null)
-                            Text('${_group!.memberIds.length} members',
-                                style: PayPactTypography.bodyMd
-                                    .copyWith(color: pt.ink3)),
+                          if (widget.fromCreate)
+                            GestureDetector(
+                              onTap: _goToGroup,
+                              child: Text('Skip',
+                                  style: PayPactTypography.bodyMd
+                                      .copyWith(color: pt.ink3)),
+                            )
+                          else
+                            const SizedBox(width: 40),
                         ]),
                       ),
+
                       Expanded(
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(
@@ -111,8 +186,8 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (_group != null) ...[
-                                Text(_group!.name.toUpperCase(),
+                              if (_groupName != null) ...[
+                                Text(_groupName!.toUpperCase(),
                                     style: PayPactTypography.label.copyWith(
                                         color: pt.accent,
                                         letterSpacing: 1.6)),
@@ -152,47 +227,46 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
                               ],
 
                               // Search field
-                              Container(
-                                height: 52,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14),
-                                decoration: BoxDecoration(
-                                  color: pt.surface,
-                                  borderRadius: PayPactRadius.md,
-                                  border: Border.all(color: pt.border),
-                                  boxShadow: pt.shadowSm,
-                                ),
-                                child: Row(children: [
-                                  Icon(Icons.search_rounded,
+                              TextField(
+                                controller: _searchCtrl,
+                                style: PayPactTypography.bodyMd
+                                    .copyWith(color: pt.ink),
+                                decoration: InputDecoration(
+                                  prefixIcon: Icon(Icons.search_rounded,
                                       color: pt.ink3, size: 18),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _searchCtrl,
-                                      style: PayPactTypography.bodyMd
-                                          .copyWith(color: pt.ink),
-                                      decoration: InputDecoration(
-                                        border: InputBorder.none,
-                                        hintText:
-                                            'Search by name or email…',
-                                        hintStyle:
-                                            PayPactTypography.bodyMd
-                                                .copyWith(color: pt.ink3),
-                                      ),
-                                      onChanged: (v) => ctx
-                                          .read<AddMembersCubit>()
-                                          .search(v,
-                                              existingMemberIds:
-                                                  _existingIds),
-                                    ),
+                                  hintText: 'Search by name or email…',
+                                  hintStyle: PayPactTypography.bodyMd
+                                      .copyWith(color: pt.ink3),
+                                  filled: true,
+                                  fillColor: pt.surface,
+                                  border: OutlineInputBorder(
+                                    borderRadius: PayPactRadius.md,
+                                    borderSide:
+                                        BorderSide(color: pt.borderStrong),
                                   ),
-                                ]),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: PayPactRadius.md,
+                                    borderSide:
+                                        BorderSide(color: pt.borderStrong),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: PayPactRadius.md,
+                                    borderSide: BorderSide(
+                                        color: pt.accent, width: 1.4),
+                                  ),
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(
+                                          horizontal: 16, vertical: 14),
+                                ),
+                                onChanged: (v) => ctx
+                                    .read<AddMembersCubit>()
+                                    .search(v,
+                                        existingMemberIds: _existingIds),
                               ),
                               const SizedBox(height: 16),
 
                               // Search results
-                              BlocBuilder<AddMembersCubit,
-                                  AddMembersState>(
+                              BlocBuilder<AddMembersCubit, AddMembersState>(
                                 builder: (context, state) {
                                   if (state is AddMembersSearching) {
                                     return const Padding(
@@ -207,55 +281,124 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
                                     AddMembersSearchDone s => s.results,
                                     _ => <UserResult>[],
                                   };
-                                  if (_searchCtrl.text.isNotEmpty &&
-                                      results.isEmpty) {
-                                    return Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 24),
-                                      child: Center(
-                                        child: Text(
-                                            'No users found. Try their exact email.',
-                                            style:
-                                                PayPactTypography.bodyMd
-                                                    .copyWith(
-                                                        color: pt.ink3)),
+
+                                  if (_searchCtrl.text.isNotEmpty) {
+                                    if (results.isEmpty) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 24),
+                                        child: Center(
+                                          child: Text(
+                                              'No users found. Try their exact email.',
+                                              style: PayPactTypography
+                                                  .bodyMd
+                                                  .copyWith(
+                                                      color: pt.ink3)),
+                                        ),
+                                      );
+                                    }
+                                    return PayPactCard(
+                                      padding: EdgeInsets.zero,
+                                      child: Column(
+                                        children: [
+                                          for (int i = 0;
+                                              i < results.length;
+                                              i++) ...[
+                                            if (i > 0)
+                                              Divider(
+                                                  color: pt.border,
+                                                  height: 1),
+                                            _UserRow(
+                                              user: results[i],
+                                              selected:
+                                                  _selectedIds.contains(
+                                                      results[i].id),
+                                              isMe: results[i].id ==
+                                                  currentUserId,
+                                              onToggle: () =>
+                                                  setState(() {
+                                                final u = results[i];
+                                                if (_selectedIds
+                                                    .contains(u.id)) {
+                                                  _selectedIds.remove(u.id);
+                                                  _selectedUsers
+                                                      .remove(u.id);
+                                                } else {
+                                                  _selectedIds.add(u.id);
+                                                  _selectedUsers[u.id] = u;
+                                                }
+                                              }),
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                     );
                                   }
-                                  if (results.isEmpty) {
+
+                                  // Circle section when not searching
+                                  if (_circleUsers.isEmpty) {
                                     return const SizedBox.shrink();
                                   }
-                                  return PayPactCard(
-                                    padding: EdgeInsets.zero,
-                                    child: Column(
-                                      children: [
-                                        for (int i = 0;
-                                            i < results.length;
-                                            i++) ...[
-                                          if (i > 0)
-                                            Divider(
-                                                color: pt.border, height: 1),
-                                          _UserRow(
-                                            user: results[i],
-                                            selected: _selectedIds.contains(
-                                                results[i].id),
-                                            isMe: results[i].id ==
-                                                currentUserId,
-                                            onToggle: () => setState(() {
-                                              final u = results[i];
-                                              if (_selectedIds
-                                                  .contains(u.id)) {
-                                                _selectedIds.remove(u.id);
-                                                _selectedUsers.remove(u.id);
-                                              } else {
-                                                _selectedIds.add(u.id);
-                                                _selectedUsers[u.id] = u;
-                                              }
-                                            }),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
+
+                                  final circleFiltered = _circleUsers
+                                      .where((c) =>
+                                          !_selectedIds.contains(c.id))
+                                      .toList();
+
+                                  if (circleFiltered.isEmpty) {
+                                    return const SizedBox.shrink();
+                                  }
+
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('FROM YOUR CIRCLE',
+                                          style: PayPactTypography.label
+                                              .copyWith(
+                                                  color: pt.ink3,
+                                                  letterSpacing: 1.5)),
+                                      const SizedBox(height: 10),
+                                      PayPactCard(
+                                        padding: EdgeInsets.zero,
+                                        child: Column(
+                                          children: [
+                                            for (int i = 0;
+                                                i < circleFiltered.length;
+                                                i++) ...[
+                                              if (i > 0)
+                                                Divider(
+                                                    color: pt.border,
+                                                    height: 1),
+                                              _CircleRow(
+                                                user: circleFiltered[i],
+                                                selected: _selectedIds
+                                                    .contains(
+                                                        circleFiltered[i].id),
+                                                onToggle: () =>
+                                                    setState(() {
+                                                  final u =
+                                                      circleFiltered[i];
+                                                  if (_selectedIds
+                                                      .contains(u.id)) {
+                                                    _selectedIds.remove(u.id);
+                                                    _selectedUsers
+                                                        .remove(u.id);
+                                                  } else {
+                                                    _selectedIds.add(u.id);
+                                                    _selectedUsers[u.id] =
+                                                        UserResult(
+                                                            id: u.id,
+                                                            name: u.name,
+                                                            email: '');
+                                                  }
+                                                }),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   );
                                 },
                               ),
@@ -294,18 +437,34 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
                                     context.pop();
                                     return;
                                   }
+                                  final auth =
+                                      context.read<AuthCubit>().state;
+                                  final actorId = auth is AuthAuthenticated
+                                      ? auth.user.id
+                                      : '';
+                                  final actorName =
+                                      auth is AuthAuthenticated
+                                          ? auth.user.name
+                                          : '';
                                   context
                                       .read<AddMembersCubit>()
                                       .addMembers(
                                         widget.groupId!,
                                         _selectedUsers.values.toList(),
+                                        actorId: actorId,
+                                        actorName: actorName,
+                                        groupName: _groupName,
                                       );
                                 },
                           label: loading
                               ? 'Adding…'
                               : _selectedIds.isEmpty
-                                  ? 'Select members to add'
-                                  : 'Add ${_selectedIds.length} member${_selectedIds.length == 1 ? '' : 's'}',
+                                  ? widget.fromCreate
+                                      ? 'Select members to add'
+                                      : 'Select members to add'
+                                  : widget.fromCreate
+                                      ? 'Add ${_selectedIds.length} member${_selectedIds.length == 1 ? '' : 's'} & open group'
+                                      : 'Add ${_selectedIds.length} member${_selectedIds.length == 1 ? '' : 's'}',
                           variant: PayPactButtonVariant.accent,
                           size: PayPactButtonSize.large,
                           isFullWidth: true,
@@ -322,6 +481,14 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
       }),
     );
   }
+}
+
+class _CircleUser {
+  final String id;
+  final String name;
+  final int sharedGroups;
+  const _CircleUser(
+      {required this.id, required this.name, required this.sharedGroups});
 }
 
 class _SelectedChip extends StatelessWidget {
@@ -350,6 +517,89 @@ class _SelectedChip extends StatelessWidget {
             onTap: onRemove,
             child: Icon(Icons.close_rounded, size: 14, color: pt.ink3)),
       ]),
+    );
+  }
+}
+
+class _CircleRow extends StatelessWidget {
+  const _CircleRow({
+    required this.user,
+    required this.selected,
+    required this.onToggle,
+  });
+  final _CircleUser user;
+  final bool selected;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    return InkWell(
+      onTap: onToggle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(children: [
+          PpAvatar(name: user.name, size: 42),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Text(user.name,
+                      style: PayPactTypography.bodyMd.copyWith(
+                          color: pt.ink, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 8),
+                  _Badge(label: 'RECENT', color: pt.accent),
+                ]),
+                const SizedBox(height: 2),
+                Text(
+                    'In ${user.sharedGroups} group${user.sharedGroups == 1 ? '' : 's'} with you',
+                    style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
+              ],
+            ),
+          ),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: selected ? pt.accent : Colors.transparent,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected ? pt.accent : pt.border,
+                width: 1.5,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              selected ? Icons.check_rounded : Icons.add_rounded,
+              color: selected ? Colors.white : pt.ink3,
+              size: 16,
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge({required this.label, required this.color});
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(label,
+          style: PayPactTypography.label.copyWith(
+              color: color, fontSize: 9, letterSpacing: 0.8)),
     );
   }
 }

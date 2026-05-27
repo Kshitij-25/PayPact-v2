@@ -2,6 +2,7 @@ import 'package:paypact/features/group/domain/entities/group_entity.dart';
 
 abstract class GroupRepository {
   Stream<List<GroupEntity>> watchUserGroups(String userId);
+  Stream<GroupEntity?> watchGroup(String groupId);
   Future<GroupEntity?> getGroup(String groupId);
   Future<GroupEntity> createGroup({
     required String name,

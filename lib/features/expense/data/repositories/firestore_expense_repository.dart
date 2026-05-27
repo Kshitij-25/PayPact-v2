@@ -43,6 +43,9 @@ class FirestoreExpenseRepository implements ExpenseRepository {
     required String groupId,
     required String title,
     required double amount,
+    required double originalAmount,
+    required String originalCurrency,
+    required double exchangeRate,
     required String category,
     required String paidById,
     required String paidByName,
@@ -54,6 +57,9 @@ class FirestoreExpenseRepository implements ExpenseRepository {
       groupId: groupId,
       title: title,
       amount: amount,
+      originalAmount: originalAmount,
+      originalCurrency: originalCurrency,
+      exchangeRate: exchangeRate,
       category: category,
       paidById: paidById,
       paidByName: paidByName,
@@ -62,6 +68,11 @@ class FirestoreExpenseRepository implements ExpenseRepository {
       createdById: createdById,
     );
     final ref = await _expensesRef(groupId).add(model.toMap());
+    // Touch the group document so watchUserGroups fires and home balances refresh
+    await _firestore
+        .collection('groups')
+        .doc(groupId)
+        .update({'updatedAt': FieldValue.serverTimestamp()});
     final doc = await ref.get();
     return ExpenseModel.fromFirestore(doc, groupId);
   }
@@ -88,6 +99,11 @@ class FirestoreExpenseRepository implements ExpenseRepository {
       'amount': amount,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    // Touch group so watchUserGroups fires and home balances refresh
+    await _firestore
+        .collection('groups')
+        .doc(groupId)
+        .update({'updatedAt': FieldValue.serverTimestamp()});
   }
 
   @override

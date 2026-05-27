@@ -56,14 +56,24 @@ class FirebaseAuthRepository implements AuthRepository {
     final credential = await _auth.signInWithEmailAndPassword(
         email: email, password: password);
     final fbUser = credential.user!;
-    final doc = await _firestore.collection('users').doc(fbUser.uid).get();
-    if (doc.exists) return UserModel.fromFirestore(doc);
-    return UserModel(
+    final docRef = _firestore.collection('users').doc(fbUser.uid);
+    final doc = await docRef.get();
+    if (doc.exists) {
+      // Backfill email field if missing (accounts created before this write was added)
+      final data = doc.data() ?? {};
+      if (!data.containsKey('email') || data['email'] == '') {
+        await docRef.update({'email': fbUser.email ?? email});
+      }
+      return UserModel.fromFirestore(await docRef.get());
+    }
+    final model = UserModel(
       id: fbUser.uid,
       name: fbUser.displayName ?? '',
-      email: fbUser.email ?? '',
+      email: fbUser.email ?? email,
       photoUrl: fbUser.photoURL,
     );
+    await docRef.set(model.toMap());
+    return model;
   }
 
   @override

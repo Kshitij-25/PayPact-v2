@@ -243,8 +243,43 @@ class _GroupDetailBody extends StatelessWidget {
                               Row(children: [
                                 Expanded(
                                   child: PayPactButton(
-                                    onPressed: () => context
-                                        .push('/group/$groupId/settle'),
+                                    onPressed: () {
+                                      // Find the member with the most negative
+                                      // balance (person you owe the most to)
+                                      final balances = loaded.memberBalances;
+                                      String? toUserId;
+                                      String? toUserName;
+                                      double worstBalance = 0;
+                                      balances.forEach((uid, bal) {
+                                        if (bal < worstBalance) {
+                                          worstBalance = bal;
+                                          toUserId = uid;
+                                          toUserName =
+                                              group.memberNames[uid] ??
+                                                  'Member';
+                                        }
+                                      });
+                                      // Fall back to first member if no
+                                      // negative balance found
+                                      if (toUserId == null &&
+                                          balances.isNotEmpty) {
+                                        toUserId = balances.keys.first;
+                                        toUserName =
+                                            group.memberNames[toUserId!] ??
+                                                'Member';
+                                      }
+                                      context.push(
+                                        '/group/$groupId/settle',
+                                        extra: {
+                                          'toUserId': toUserId ?? '',
+                                          'toUserName': toUserName ?? '',
+                                          'suggestedAmount':
+                                              worstBalance.abs(),
+                                          'currency': group.currency,
+                                          'groupName': group.name,
+                                        },
+                                      );
+                                    },
                                     label: 'Settle up',
                                     variant: PayPactButtonVariant.accent,
                                     isFullWidth: true,

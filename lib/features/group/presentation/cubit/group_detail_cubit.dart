@@ -12,40 +12,56 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
   final ExpenseRepository _expenseRepo;
   final String _groupId;
   final String _currentUserId;
-  StreamSubscription<List<ExpenseEntity>>? _sub;
+
+  StreamSubscription<GroupEntity?>? _groupSub;
+  StreamSubscription<List<ExpenseEntity>>? _expenseSub;
+
+  GroupEntity? _latestGroup;
+  List<ExpenseEntity> _latestExpenses = [];
 
   GroupDetailCubit(
       this._groupRepo, this._expenseRepo, this._groupId, this._currentUserId)
       : super(GroupDetailInitial());
 
-  void load() async {
+  void load() {
     emit(GroupDetailLoading());
-    try {
-      final group = await _groupRepo.getGroup(_groupId);
-      if (group == null) {
-        emit(GroupDetailError('Group not found'));
-        return;
-      }
-      _sub = _expenseRepo.watchGroupExpenses(_groupId).listen(
-        (expenses) async {
-          final settlements =
-              await _expenseRepo.getGroupSettlements(_groupId);
-          final netBalance =
-              _myBalance(expenses, settlements, _currentUserId);
-          final memberBalances =
-              _memberBalances(expenses, settlements, group);
-          emit(GroupDetailLoaded(
-            group: group,
-            expenses: expenses,
-            netBalance: netBalance,
-            memberBalances: memberBalances,
-          ));
-        },
-        onError: (e) => emit(GroupDetailError(e.toString())),
-      );
-    } catch (e) {
-      emit(GroupDetailError(e.toString()));
-    }
+
+    _groupSub = _groupRepo.watchGroup(_groupId).listen(
+      (group) {
+        if (group == null) {
+          emit(GroupDetailError('Group not found'));
+          return;
+        }
+        _latestGroup = group;
+        _emitLoaded();
+      },
+      onError: (e) => emit(GroupDetailError(e.toString())),
+    );
+
+    _expenseSub = _expenseRepo.watchGroupExpenses(_groupId).listen(
+      (expenses) {
+        _latestExpenses = expenses;
+        _emitLoaded();
+      },
+      onError: (e) => emit(GroupDetailError(e.toString())),
+    );
+  }
+
+  Future<void> _emitLoaded() async {
+    final group = _latestGroup;
+    if (group == null) return;
+
+    final settlements = await _expenseRepo.getGroupSettlements(_groupId);
+    final netBalance = _myBalance(_latestExpenses, settlements, _currentUserId);
+    final memberBalances =
+        _memberBalances(_latestExpenses, settlements, group);
+
+    emit(GroupDetailLoaded(
+      group: group,
+      expenses: _latestExpenses,
+      netBalance: netBalance,
+      memberBalances: memberBalances,
+    ));
   }
 
   double _myBalance(List<ExpenseEntity> expenses,
@@ -69,8 +85,6 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
     return balance;
   }
 
-  // Returns balance from _currentUserId's perspective per other member.
-  // Positive = that member owes currentUser. Negative = currentUser owes them.
   Map<String, double> _memberBalances(List<ExpenseEntity> expenses,
       List<Map<String, dynamic>> settlements, GroupEntity group) {
     final Map<String, double> bal = {};
@@ -82,14 +96,12 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
     for (final e in expenses) {
       final myShare = e.splitAmountFor(_currentUserId);
       if (e.paidById == _currentUserId) {
-        // Others owe me their share
         for (final split in e.splits) {
           if (split.userId != _currentUserId) {
             bal[split.userId] = (bal[split.userId] ?? 0) + split.amount;
           }
         }
       } else {
-        // I owe the payer my share
         if (bal.containsKey(e.paidById)) {
           bal[e.paidById] = (bal[e.paidById] ?? 0) - myShare;
         }
@@ -112,7 +124,8 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
 
   @override
   Future<void> close() {
-    _sub?.cancel();
+    _groupSub?.cancel();
+    _expenseSub?.cancel();
     return super.close();
   }
 }
