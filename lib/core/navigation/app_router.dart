@@ -14,6 +14,7 @@ import 'package:paypact/features/home/presentation/screens/home_screen.dart';
 import 'package:paypact/features/notification/presentation/screens/notifications_screen.dart';
 import 'package:paypact/features/onboarding/onboarding_screen.dart';
 import 'package:paypact/features/profile/presentation/screens/profile_screen.dart';
+import 'package:paypact/features/group/presentation/screens/group_settings_screen.dart';
 import 'package:paypact/features/profile/presentation/screens/settings_screen.dart';
 import 'package:paypact/features/settle/settle_success_screen.dart';
 import 'package:paypact/features/settle/settle_up_screen.dart';
@@ -137,7 +138,10 @@ final appRouter = GoRouter(
       path: AppRoutes.addMembers,
       pageBuilder: (context, state) => _slideRight(
         key: state.pageKey,
-        child: const AddMembersScreen(),
+        child: AddMembersScreen(
+          groupId:
+              (state.extra as Map<String, dynamic>?)?['groupId'] as String?,
+        ),
       ),
     ),
     GoRoute(
@@ -271,7 +275,9 @@ final appRouter = GoRouter(
               path: 'settings',
               pageBuilder: (context, state) => _slideRight(
                 key: state.pageKey,
-                child: const SettingsScreen(),
+                child: GroupSettingsScreen(
+                  groupId: state.pathParameters['groupId']!,
+                ),
                 forward: PayPactMotion.mid,
                 reverse: PayPactMotion.mid,
               ),

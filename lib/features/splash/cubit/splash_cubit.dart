@@ -8,9 +8,13 @@ class SplashCubit extends Cubit<SplashState> {
   SplashCubit() : super(SplashLoading());
 
   Future<void> start() async {
-    await Future.delayed(const Duration(milliseconds: 2200));
+    final auth = locator<fb.FirebaseAuth>();
+    final results = await Future.wait([
+      Future.delayed(const Duration(milliseconds: 2200)),
+      auth.authStateChanges().first,
+    ]);
     if (isClosed) return;
-    final user = locator<fb.FirebaseAuth>().currentUser;
+    final user = results[1] as fb.User?;
     emit(SplashDone(isAuthenticated: user != null));
   }
 }

@@ -142,14 +142,8 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
                               decoration: BoxDecoration(
                                 color: pt.surface,
                                 borderRadius: PayPactRadius.md,
-                                border: Border.all(
-                                    color: pt.accent, width: 1.5),
-                                boxShadow: [
-                                  BoxShadow(
-                                      color: pt.accentSoft,
-                                      spreadRadius: 3,
-                                      blurRadius: 0)
-                                ],
+                                border: Border.all(color: pt.border),
+                                boxShadow: pt.shadowSm,
                               ),
                               child: TextField(
                                 controller: _nameCtrl,
@@ -161,6 +155,9 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
                                       PayPactTypography.headingLg
                                           .copyWith(color: pt.ink3),
                                   border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  filled: false,
                                   isDense: true,
                                 ),
                               ),

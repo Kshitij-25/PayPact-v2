@@ -210,6 +210,9 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                                                     alpha: 0.4),
                                             fontSize: 52),
                                     border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    filled: false,
                                     prefixText: '₹',
                                     prefixStyle:
                                         PayPactTypography
@@ -261,6 +264,9 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                                               color: pt.ink3,
                                               fontSize: 15),
                                   border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  filled: false,
                                   isDense: true,
                                 ),
                               ),

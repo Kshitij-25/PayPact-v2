@@ -12,5 +12,7 @@ abstract class GroupRepository {
     required String createdByName,
   });
   Future<void> addMember(String groupId, String userId, String userName);
+  Future<void> removeMember(String groupId, String userId);
+  Future<void> updateGroup(String groupId, {String? name, String? emoji, String? category});
   Future<void> deleteGroup(String groupId);
 }

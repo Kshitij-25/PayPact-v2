@@ -61,6 +61,30 @@ class FirestoreGroupRepository implements GroupRepository {
   }
 
   @override
+  Future<void> removeMember(String groupId, String userId) async {
+    final snap = await _firestore.collection('groups').doc(groupId).get();
+    final data = snap.data() ?? {};
+    final names = Map<String, dynamic>.from((data['memberNames'] as Map?) ?? {});
+    names.remove(userId);
+    await _firestore.collection('groups').doc(groupId).update({
+      'memberIds': FieldValue.arrayRemove([userId]),
+      'memberNames': names,
+    });
+  }
+
+  @override
+  Future<void> updateGroup(String groupId,
+      {String? name, String? emoji, String? category}) async {
+    final updates = <String, dynamic>{};
+    if (name != null) updates['name'] = name;
+    if (emoji != null) updates['emoji'] = emoji;
+    if (category != null) updates['category'] = category;
+    if (updates.isNotEmpty) {
+      await _firestore.collection('groups').doc(groupId).update(updates);
+    }
+  }
+
+  @override
   Future<void> deleteGroup(String groupId) async {
     await _firestore.collection('groups').doc(groupId).delete();
   }

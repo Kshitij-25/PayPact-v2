@@ -319,6 +319,9 @@ class _InputField extends StatelessWidget {
               hintStyle: PayPactTypography.bodyLg
                   .copyWith(color: pt.ink3, fontSize: 15),
               border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
               isDense: true,
             ),
           ),
