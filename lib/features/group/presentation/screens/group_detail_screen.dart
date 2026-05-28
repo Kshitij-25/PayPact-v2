@@ -259,12 +259,21 @@ class _GroupDetailBody extends StatelessWidget {
                                                   'Member';
                                         }
                                       });
-                                      // Fall back to first member if no
-                                      // negative balance found
+                                      // Fall back to member with largest
+                                      // absolute balance if no negative found
                                       if (toUserId == null &&
                                           balances.isNotEmpty) {
-                                        toUserId = balances.keys.first;
-                                        toUserName =
+                                        balances.forEach((uid, bal) {
+                                          if (bal.abs() > worstBalance.abs()) {
+                                            worstBalance = bal;
+                                            toUserId = uid;
+                                            toUserName =
+                                                group.memberNames[uid] ??
+                                                    'Member';
+                                          }
+                                        });
+                                        toUserId ??= balances.keys.first;
+                                        toUserName ??=
                                             group.memberNames[toUserId!] ??
                                                 'Member';
                                       }

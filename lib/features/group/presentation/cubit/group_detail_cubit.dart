@@ -18,6 +18,7 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
 
   GroupEntity? _latestGroup;
   List<ExpenseEntity> _latestExpenses = [];
+  bool _expensesReady = false;
 
   GroupDetailCubit(
       this._groupRepo, this._expenseRepo, this._groupId, this._currentUserId)
@@ -33,7 +34,7 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
           return;
         }
         _latestGroup = group;
-        _emitLoaded();
+        if (_expensesReady) _emitLoaded();
       },
       onError: (e) => emit(GroupDetailError(e.toString())),
     );
@@ -41,6 +42,7 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
     _expenseSub = _expenseRepo.watchGroupExpenses(_groupId).listen(
       (expenses) {
         _latestExpenses = expenses;
+        _expensesReady = true;
         _emitLoaded();
       },
       onError: (e) => emit(GroupDetailError(e.toString())),

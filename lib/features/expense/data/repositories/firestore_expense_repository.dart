@@ -112,8 +112,14 @@ class FirestoreExpenseRepository implements ExpenseRepository {
     final snap = await _settlementsRef(groupId)
         .orderBy('createdAt', descending: true)
         .get();
-    return snap.docs
-        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
-        .toList();
+    return snap.docs.map((d) {
+      final data = d.data() as Map<String, dynamic>;
+      final ts = data['createdAt'];
+      return {
+        'id': d.id,
+        ...data,
+        'createdAt': ts is Timestamp ? ts.toDate() : null,
+      };
+    }).toList();
   }
 }

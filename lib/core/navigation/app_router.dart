@@ -16,6 +16,7 @@ import 'package:paypact/features/onboarding/onboarding_screen.dart';
 import 'package:paypact/features/profile/presentation/screens/profile_screen.dart';
 import 'package:paypact/features/group/presentation/screens/group_settings_screen.dart';
 import 'package:paypact/features/profile/presentation/screens/settings_screen.dart';
+import 'package:paypact/features/insights/insights_screen.dart';
 import 'package:paypact/features/settle/settle_success_screen.dart';
 import 'package:paypact/features/settle/settle_up_screen.dart';
 import 'package:paypact/features/splash/splash_screen.dart';
@@ -203,6 +204,13 @@ final appRouter = GoRouter(
         child: const HomeScreen(),
       ),
       routes: [
+        GoRoute(
+          path: 'insights',
+          pageBuilder: (context, state) => _slideRight(
+            key: state.pageKey,
+            child: const InsightsScreen(),
+          ),
+        ),
         // group/create must be before group/:groupId to avoid param conflict
         GoRoute(
           path: 'group/create',
