@@ -175,9 +175,9 @@ class GroupsCubit extends Cubit<GroupsState> {
       }
     }
     for (final s in settlements) {
-      if (s['toUserId'] == userId) {
+      if (s['fromUserId'] == userId) {
         balance += (s['amount'] as num).toDouble();
-      } else if (s['fromUserId'] == userId) {
+      } else if (s['toUserId'] == userId) {
         balance -= (s['amount'] as num).toDouble();
       }
     }

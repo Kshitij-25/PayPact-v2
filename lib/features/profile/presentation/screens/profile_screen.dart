@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/app_router.dart';
-import 'package:paypact/design_system/components/paypact_bottom_nav.dart';
+import 'package:paypact/design_system/components/adaptive_nav_scaffold.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -124,19 +124,32 @@ class _ProfileBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final pt = context.pt;
 
-    return Scaffold(
-      backgroundColor: pt.bg,
-      bottomNavigationBar: PayPactBottomNav(
-        currentIndex: 3,
-        onTap: (i) => [
-          () => context.go(AppRoutes.home),
-          () => context.go(AppRoutes.groups),
-          () => context.go(AppRoutes.activity),
-          () => context.go(AppRoutes.profile),
-        ][i](),
-        onFabTap: () => context.push('/group/create'),
-      ),
-      body: BlocBuilder<ProfileCubit, ProfileState>(
+    return BlocBuilder<ProfileCubit, ProfileState>(
+      builder: (context, profileStateOuter) {
+        final webName = switch (profileStateOuter) {
+          ProfileLoaded s => s.user.name,
+          ProfileSaving s => s.user.name,
+          _ => (context.watch<AuthCubit>().state is AuthAuthenticated
+              ? (context.watch<AuthCubit>().state as AuthAuthenticated).user.name
+              : 'User'),
+        };
+
+        return AdaptiveNavScaffold(
+          currentIndex: 3,
+          onNavTap: (i) => [
+            () => context.go(AppRoutes.home),
+            () => context.go(AppRoutes.groups),
+            () => context.go(AppRoutes.activity),
+            () => context.go(AppRoutes.profile),
+          ][i](),
+          onFabTap: () => context.push('/group/create'),
+          webEyebrow: 'PROFILE',
+          webTitle: webName,
+          webSubtitle: 'Manage your account and preferences.',
+          webActionLabel: 'Settings',
+          webActionOnTap: () => context.push(AppRoutes.profileSettings),
+          webUserName: webName,
+          body: BlocBuilder<ProfileCubit, ProfileState>(
         builder: (context, state) {
           final userName = switch (state) {
             ProfileLoaded s => s.user.name,
@@ -361,6 +374,8 @@ class _ProfileBody extends StatelessWidget {
           );
         },
       ),
+        );
+      },
     );
   }
 }

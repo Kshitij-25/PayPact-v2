@@ -48,7 +48,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAjwfmOcYqJeu6gTNDA5COJkfqgXFawIGc',
-    appId: '1:531387933797:android:3285b4e6fc0aafce87d28c',
+    appId: '1:531387933797:android:85c0bb47fb723bc787d28c',
     messagingSenderId: '531387933797',
     projectId: 'paypact-fec8e',
     storageBucket: 'paypact-fec8e.firebasestorage.app',
@@ -56,13 +56,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCs8kMYqE5N2C_gFkWRwIM51ZMmnElnGlY',
-    appId: '1:531387933797:ios:e8300e850f99e56a87d28c',
+    appId: '1:531387933797:ios:0ea51f18ed3d79c187d28c',
     messagingSenderId: '531387933797',
     projectId: 'paypact-fec8e',
     storageBucket: 'paypact-fec8e.firebasestorage.app',
-    iosClientId:
-        '531387933797-fv558vapve1tpej0v86hiqbcm2sg9536.apps.googleusercontent.com',
-    iosBundleId: 'com.paypact.app',
+    iosClientId: '531387933797-6r3upag01ihg89jokos6601s5mlkcg6u.apps.googleusercontent.com',
+    iosBundleId: 'com.kshitijcodecraft.paypact',
   );
 
   static const FirebaseOptions web = FirebaseOptions(
@@ -74,4 +73,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'paypact-fec8e.firebasestorage.app',
     measurementId: 'G-HZ4E0L5KT6',
   );
+
 }

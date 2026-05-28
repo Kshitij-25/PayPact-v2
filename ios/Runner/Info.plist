@@ -31,7 +31,7 @@
 			<string>com.paypact.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.531387933797-fv558vapve1tpej0v86hiqbcm2sg9536</string>
+				<string>com.googleusercontent.apps.531387933797-6r3upag01ihg89jokos6601s5mlkcg6u</string>
 			</array>
 		</dict>
 		<dict>
@@ -48,7 +48,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>GIDClientID</key>
-	<string>531387933797-fv558vapve1tpej0v86hiqbcm2sg9536.apps.googleusercontent.com</string>
+	<string>531387933797-6r3upag01ihg89jokos6601s5mlkcg6u.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

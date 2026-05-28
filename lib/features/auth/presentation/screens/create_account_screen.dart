@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/app_router.dart';
+import 'package:paypact/core/utils/responsive.dart';
+import 'package:paypact/features/auth/presentation/screens/auth_brand_panel.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -48,6 +50,203 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       builder: (context, state) {
         final loading = state is AuthLoading;
 
+        // ── Shared form content ──────────────────────────────────────────
+        Widget formContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('NEW HERE',
+                style: PayPactTypography.label
+                    .copyWith(color: pt.accent, letterSpacing: 1.6)),
+            const SizedBox(height: 14),
+            Text('Make a pact\nwith your money.',
+                style: PayPactTypography.displayLg.copyWith(color: pt.ink)),
+            const SizedBox(height: 10),
+            Text('A minute to set up. A lifetime of calmer splits.',
+                style: PayPactTypography.bodyLg.copyWith(color: pt.ink2)),
+            const SizedBox(height: 28),
+            _Label(text: 'FULL NAME'),
+            const SizedBox(height: 8),
+            _InputField(
+                controller: _nameCtrl,
+                icon: Icons.person_outline_rounded,
+                hint: 'Your name'),
+            const SizedBox(height: 14),
+            _Label(text: 'EMAIL'),
+            const SizedBox(height: 8),
+            _InputField(
+                controller: _emailCtrl,
+                icon: Icons.mail_outline_rounded,
+                hint: 'you@example.com',
+                keyboardType: TextInputType.emailAddress),
+            const SizedBox(height: 14),
+            _Label(text: 'PASSWORD'),
+            const SizedBox(height: 8),
+            _InputField(
+              controller: _passwordCtrl,
+              icon: Icons.lock_outline_rounded,
+              hint: '8+ characters',
+              obscure: _obscure,
+              suffix: GestureDetector(
+                onTap: () => setState(() => _obscure = !_obscure),
+                child: Icon(
+                  _obscure
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: pt.ink3,
+                  size: 18,
+                ),
+              ),
+            ),
+            const SizedBox(height: 22),
+            GestureDetector(
+              onTap: () => setState(() => _agreed = !_agreed),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: _agreed ? pt.accent : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                          color: _agreed ? pt.accent : pt.border,
+                          width: 1.5),
+                    ),
+                    child: _agreed
+                        ? const Icon(Icons.check_rounded,
+                            color: Colors.white, size: 14)
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        style: PayPactTypography.bodySm
+                            .copyWith(color: pt.ink2, height: 1.5),
+                        children: [
+                          const TextSpan(text: 'I agree to the '),
+                          TextSpan(
+                            text: 'Terms',
+                            style: TextStyle(
+                                color: pt.ink,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline),
+                          ),
+                          const TextSpan(text: ' and '),
+                          TextSpan(
+                            text: 'Privacy Policy',
+                            style: TextStyle(
+                                color: pt.ink,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline),
+                          ),
+                          const TextSpan(text: '.'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            PayPactButton(
+              onPressed: (loading || !_agreed)
+                  ? null
+                  : () => locator<AuthCubit>().createAccount(
+                        _emailCtrl.text.trim(),
+                        _passwordCtrl.text,
+                        _nameCtrl.text.trim(),
+                      ),
+              label: loading ? 'Creating account…' : 'Create account',
+              variant: PayPactButtonVariant.accent,
+              size: PayPactButtonSize.large,
+              isFullWidth: true,
+              rightIcon: Icons.arrow_forward_rounded,
+            ),
+            const SizedBox(height: 20),
+            Row(children: [
+              Expanded(child: Divider(color: pt.border)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('OR',
+                    style:
+                        PayPactTypography.label.copyWith(color: pt.ink3)),
+              ),
+              Expanded(child: Divider(color: pt.border)),
+            ]),
+            const SizedBox(height: 20),
+            PayPactButton(
+              onPressed: loading
+                  ? null
+                  : () => locator<AuthCubit>().signInWithGoogle(),
+              label: 'Sign up with Google',
+              variant: PayPactButtonVariant.secondary,
+              size: PayPactButtonSize.large,
+              isFullWidth: true,
+              leftIcon: Icons.g_mobiledata_rounded,
+            ),
+            const SizedBox(height: 28),
+            Center(
+              child: GestureDetector(
+                onTap: () => context.pop(),
+                child: Text.rich(
+                  TextSpan(
+                    style:
+                        PayPactTypography.bodyMd.copyWith(color: pt.ink2),
+                    children: [
+                      const TextSpan(text: 'Already have an account? '),
+                      TextSpan(
+                        text: 'Sign in',
+                        style: PayPactTypography.bodyMd.copyWith(
+                            color: pt.accent,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+
+        if (context.isDesktop) {
+          return Scaffold(
+            backgroundColor: pt.bg,
+            body: Row(
+              children: [
+                SizedBox(
+                  width: 480,
+                  child: Stack(
+                    children: [
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(48, 48, 48, 48),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const AuthLogoRow(),
+                            const SizedBox(height: 52),
+                            formContent,
+                          ],
+                        ),
+                      ),
+                      if (loading)
+                        const Positioned.fill(
+                          child: ColoredBox(
+                            color: Colors.black12,
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const Expanded(child: AuthBrandPanel()),
+              ],
+            ),
+          );
+        }
+
         return Scaffold(
           backgroundColor: pt.bg,
           body: Stack(
@@ -65,188 +264,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                       const SizedBox(height: 36),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('NEW HERE',
-                                style: PayPactTypography.label.copyWith(
-                                    color: pt.accent, letterSpacing: 1.6)),
-                            const SizedBox(height: 14),
-                            Text('Make a pact\nwith your money.',
-                                style: PayPactTypography.displayLg
-                                    .copyWith(color: pt.ink)),
-                            const SizedBox(height: 10),
-                            Text(
-                                'A minute to set up. A lifetime of calmer splits.',
-                                style: PayPactTypography.bodyLg
-                                    .copyWith(color: pt.ink2)),
-                            const SizedBox(height: 28),
-                            _Label(text: 'FULL NAME'),
-                            const SizedBox(height: 8),
-                            _InputField(
-                                controller: _nameCtrl,
-                                icon: Icons.person_outline_rounded,
-                                hint: 'Your name'),
-                            const SizedBox(height: 14),
-                            _Label(text: 'EMAIL'),
-                            const SizedBox(height: 8),
-                            _InputField(
-                                controller: _emailCtrl,
-                                icon: Icons.mail_outline_rounded,
-                                hint: 'you@example.com',
-                                keyboardType: TextInputType.emailAddress),
-                            const SizedBox(height: 14),
-                            _Label(text: 'PASSWORD'),
-                            const SizedBox(height: 8),
-                            _InputField(
-                              controller: _passwordCtrl,
-                              icon: Icons.lock_outline_rounded,
-                              hint: '8+ characters',
-                              obscure: _obscure,
-                              suffix: GestureDetector(
-                                onTap: () =>
-                                    setState(() => _obscure = !_obscure),
-                                child: Icon(
-                                  _obscure
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  color: pt.ink3,
-                                  size: 18,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 22),
-                            GestureDetector(
-                              onTap: () =>
-                                  setState(() => _agreed = !_agreed),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  AnimatedContainer(
-                                    duration:
-                                        const Duration(milliseconds: 150),
-                                    width: 22,
-                                    height: 22,
-                                    decoration: BoxDecoration(
-                                      color: _agreed
-                                          ? pt.accent
-                                          : Colors.transparent,
-                                      borderRadius:
-                                          BorderRadius.circular(6),
-                                      border: Border.all(
-                                        color: _agreed
-                                            ? pt.accent
-                                            : pt.border,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: _agreed
-                                        ? const Icon(Icons.check_rounded,
-                                            color: Colors.white, size: 14)
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text.rich(
-                                      TextSpan(
-                                        style: PayPactTypography.bodySm
-                                            .copyWith(
-                                                color: pt.ink2, height: 1.5),
-                                        children: [
-                                          const TextSpan(
-                                              text: 'I agree to the '),
-                                          TextSpan(
-                                            text: 'Terms',
-                                            style: TextStyle(
-                                                color: pt.ink,
-                                                fontWeight: FontWeight.w600,
-                                                decoration: TextDecoration
-                                                    .underline),
-                                          ),
-                                          const TextSpan(text: ' and '),
-                                          TextSpan(
-                                            text: 'Privacy Policy',
-                                            style: TextStyle(
-                                                color: pt.ink,
-                                                fontWeight: FontWeight.w600,
-                                                decoration: TextDecoration
-                                                    .underline),
-                                          ),
-                                          const TextSpan(text: '.'),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            PayPactButton(
-                              onPressed: (loading || !_agreed)
-                                  ? null
-                                  : () =>
-                                      locator<AuthCubit>().createAccount(
-                                        _emailCtrl.text.trim(),
-                                        _passwordCtrl.text,
-                                        _nameCtrl.text.trim(),
-                                      ),
-                              label: loading
-                                  ? 'Creating account…'
-                                  : 'Create account',
-                              variant: PayPactButtonVariant.accent,
-                              size: PayPactButtonSize.large,
-                              isFullWidth: true,
-                              rightIcon: Icons.arrow_forward_rounded,
-                            ),
-                            const SizedBox(height: 24),
-                            Row(children: [
-                              Expanded(child: Divider(color: pt.border)),
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
-                                child: Text('OR',
-                                    style: PayPactTypography.label
-                                        .copyWith(color: pt.ink3)),
-                              ),
-                              Expanded(child: Divider(color: pt.border)),
-                            ]),
-                            const SizedBox(height: 24),
-                            PayPactButton(
-                              onPressed: loading
-                                  ? null
-                                  : () =>
-                                      locator<AuthCubit>().signInWithGoogle(),
-                              label: 'Sign up with Google',
-                              variant: PayPactButtonVariant.secondary,
-                              size: PayPactButtonSize.large,
-                              isFullWidth: true,
-                              leftIcon: Icons.g_mobiledata_rounded,
-                            ),
-                            const SizedBox(height: 22),
-                            Center(
-                              child: GestureDetector(
-                                onTap: () => context.pop(),
-                                child: Text.rich(
-                                  TextSpan(
-                                    style: PayPactTypography.bodyMd
-                                        .copyWith(color: pt.ink2),
-                                    children: [
-                                      const TextSpan(
-                                          text: 'Already have an account? '),
-                                      TextSpan(
-                                        text: 'Sign in',
-                                        style: PayPactTypography.bodyMd
-                                            .copyWith(
-                                                color: pt.accent,
-                                                fontWeight: FontWeight.w600),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                        child: formContent,
                       ),
                     ],
                   ),

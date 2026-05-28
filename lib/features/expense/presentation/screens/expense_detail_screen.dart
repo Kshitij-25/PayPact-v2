@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
@@ -84,7 +85,7 @@ class _ExpenseDetailBody extends StatelessWidget {
                 left: 0,
                 right: 0,
                 child: Container(
-                  height: 280,
+                  height: context.sh(280),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
@@ -101,7 +102,7 @@ class _ExpenseDetailBody extends StatelessWidget {
                         opacity: 0.18,
                         child: Text(
                           _emojiForCategory(cat),
-                          style: const TextStyle(fontSize: 200),
+                          style: TextStyle(fontSize: context.sp(200)),
                         ),
                       ),
                     ),
@@ -149,7 +150,7 @@ class _ExpenseDetailBody extends StatelessWidget {
                             Text(
                               '₹${expense.amount.toStringAsFixed(expense.amount.truncateToDouble() == expense.amount ? 0 : 2)}',
                               style: PayPactTypography.amountHero
-                                  .copyWith(color: pt.ink, fontSize: 56),
+                                  .copyWith(color: pt.ink, fontSize: context.sp(56)),
                             ),
                             const SizedBox(height: 8),
                             Text.rich(

@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/navigation/app_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/utils/responsive.dart';
+import 'package:paypact/features/auth/presentation/screens/auth_brand_panel.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -44,6 +46,154 @@ class _SignInScreenState extends State<SignInScreen> {
       },
       builder: (context, state) {
         final loading = state is AuthLoading;
+
+        if (context.isDesktop) {
+          return Scaffold(
+            backgroundColor: pt.bg,
+            body: Row(
+              children: [
+                // ── Form panel ───────────────────────────────────────────────
+                SizedBox(
+                  width: 480,
+                  child: Stack(
+                    children: [
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(48, 48, 48, 48),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const AuthLogoRow(),
+                            const SizedBox(height: 52),
+                            Text('WELCOME BACK',
+                                style: PayPactTypography.label.copyWith(
+                                    color: pt.accent, letterSpacing: 1.6)),
+                            const SizedBox(height: 14),
+                            Text("Hello, friend.\nLet's get you in.",
+                                style: PayPactTypography.displayLg
+                                    .copyWith(color: pt.ink)),
+                            const SizedBox(height: 10),
+                            Text(
+                              "Sign in with your email — we'll keep things calm.",
+                              style:
+                                  PayPactTypography.bodyLg.copyWith(color: pt.ink2),
+                            ),
+                            const SizedBox(height: 36),
+                            _Label(text: 'EMAIL'),
+                            const SizedBox(height: 8),
+                            _TextField(
+                              controller: _emailCtrl,
+                              icon: Icons.mail_outline_rounded,
+                              hint: 'you@example.com',
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _Label(text: 'PASSWORD'),
+                                Text('Forgot password?',
+                                    style: PayPactTypography.bodySm.copyWith(
+                                        color: pt.accent,
+                                        fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            _TextField(
+                              controller: _passwordCtrl,
+                              icon: Icons.lock_outline_rounded,
+                              hint: '••••••••',
+                              obscure: _obscure,
+                              suffix: GestureDetector(
+                                onTap: () =>
+                                    setState(() => _obscure = !_obscure),
+                                child: Icon(
+                                  _obscure
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  color: pt.ink3,
+                                  size: 18,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            PayPactButton(
+                              onPressed: loading
+                                  ? null
+                                  : () => locator<AuthCubit>().signInWithEmail(
+                                        _emailCtrl.text.trim(),
+                                        _passwordCtrl.text,
+                                      ),
+                              label: loading ? 'Signing in…' : 'Sign in',
+                              variant: PayPactButtonVariant.accent,
+                              size: PayPactButtonSize.large,
+                              isFullWidth: true,
+                              rightIcon: Icons.arrow_forward_rounded,
+                            ),
+                            const SizedBox(height: 20),
+                            Row(children: [
+                              Expanded(child: Divider(color: pt.border)),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                child: Text('OR',
+                                    style: PayPactTypography.label
+                                        .copyWith(color: pt.ink3)),
+                              ),
+                              Expanded(child: Divider(color: pt.border)),
+                            ]),
+                            const SizedBox(height: 20),
+                            PayPactButton(
+                              onPressed: loading
+                                  ? null
+                                  : () =>
+                                      locator<AuthCubit>().signInWithGoogle(),
+                              label: 'Continue with Google',
+                              variant: PayPactButtonVariant.secondary,
+                              size: PayPactButtonSize.large,
+                              isFullWidth: true,
+                              leftIcon: Icons.g_mobiledata_rounded,
+                            ),
+                            const SizedBox(height: 28),
+                            Center(
+                              child: GestureDetector(
+                                onTap: () => context.push(AppRoutes.signUp),
+                                child: Text.rich(
+                                  TextSpan(
+                                    style: PayPactTypography.bodyMd
+                                        .copyWith(color: pt.ink2),
+                                    children: [
+                                      const TextSpan(text: 'New to PayPact? '),
+                                      TextSpan(
+                                        text: 'Create an account',
+                                        style: PayPactTypography.bodyMd
+                                            .copyWith(
+                                                color: pt.accent,
+                                                fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (loading)
+                        const Positioned.fill(
+                          child: ColoredBox(
+                            color: Colors.black12,
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // ── Brand panel ──────────────────────────────────────────────
+                const Expanded(child: AuthBrandPanel()),
+              ],
+            ),
+          );
+        }
 
         return Scaffold(
           backgroundColor: pt.bg,

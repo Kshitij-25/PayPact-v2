@@ -1,10 +1,13 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/app_router.dart';
-import 'package:paypact/design_system/components/paypact_bottom_nav.dart';
+import 'package:paypact/core/utils/responsive.dart';
+import 'package:paypact/design_system/components/adaptive_nav_scaffold.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
@@ -43,6 +46,143 @@ class _GroupDetailBody extends StatelessWidget {
   const _GroupDetailBody({required this.groupId});
   final String groupId;
 
+  void _showSettlePicker(
+    BuildContext context,
+    GroupDetailLoaded loaded,
+    dynamic group,
+    String gid,
+  ) {
+    final authState = context.read<AuthCubit>().state;
+    final currentUserId =
+        authState is AuthAuthenticated ? authState.user.id : '';
+    final currentUserName =
+        authState is AuthAuthenticated ? authState.user.name : 'You';
+    final pt = context.pt;
+
+    final nonZero = loaded.memberBalances.entries
+        .where((e) => e.value.abs() > 0.01)
+        .toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+
+    if (nonZero.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You're all settled up in this group.")),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) {
+        return Container(
+          decoration: BoxDecoration(
+            color: pt.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: pt.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text('Who are you settling with?',
+                  style: PayPactTypography.headingMd.copyWith(color: pt.ink)),
+              const SizedBox(height: 6),
+              Text('Select a member to settle your balance.',
+                  style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
+              const SizedBox(height: 20),
+              ...nonZero.map((entry) {
+                final memberId = entry.key;
+                final balance = entry.value;
+                final memberName =
+                    group.memberNames[memberId] as String? ?? 'Member';
+                // balance > 0 → they owe you; balance < 0 → you owe them
+                final youOwe = balance < 0;
+                final absAmount = balance.abs();
+                final amtStr =
+                    '${group.currency}${absAmount.toStringAsFixed(absAmount.truncateToDouble() == absAmount ? 0 : 2)}';
+
+                return InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    Navigator.pop(context);
+                    final fromId = youOwe ? currentUserId : memberId;
+                    final fromName = youOwe ? currentUserName : memberName;
+                    final toId = youOwe ? memberId : currentUserId;
+                    final toName = youOwe ? memberName : currentUserName;
+                    context.push(
+                      '/group/$gid/settle',
+                      extra: {
+                        'fromUserId': fromId,
+                        'fromUserName': fromName,
+                        'toUserId': toId,
+                        'toUserName': toName,
+                        'suggestedAmount': absAmount,
+                        'currency': group.currency as String? ?? '₹',
+                        'groupName': group.name as String? ?? '',
+                      },
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(children: [
+                      PpAvatar(name: memberName, size: 44),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(memberName,
+                                style: PayPactTypography.bodyMd.copyWith(
+                                    color: pt.ink,
+                                    fontWeight: FontWeight.w600)),
+                            Text(
+                              youOwe
+                                  ? 'You owe $amtStr'
+                                  : '$amtStr owed to you',
+                              style: PayPactTypography.bodySm.copyWith(
+                                  color: youOwe ? pt.negative : pt.positive),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: youOwe ? pt.negativeSoft : pt.positiveSoft,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          youOwe ? 'Pay' : 'Received',
+                          style: PayPactTypography.label.copyWith(
+                              color: youOwe ? pt.negative : pt.positive,
+                              letterSpacing: 0.8),
+                        ),
+                      ),
+                    ]),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
@@ -69,19 +209,16 @@ class _GroupDetailBody extends StatelessWidget {
         final cat = _catFromString(group.category);
         final tripTone = PpCategoryDisc.tone(context, cat);
 
-        return Scaffold(
-          backgroundColor: pt.bg,
-          bottomNavigationBar: PayPactBottomNav(
-            currentIndex: 1,
-            onTap: (i) => [
-              () => context.go(AppRoutes.home),
-              () => context.go(AppRoutes.groups),
-              () => context.go(AppRoutes.activity),
-              () => context.go('/profile'),
-            ][i](),
-            onFabTap: () =>
-                context.push('/group/$groupId/expense/add'),
-          ),
+        return AdaptiveNavScaffold(
+          currentIndex: 1,
+          onNavTap: (i) => [
+            () => context.go(AppRoutes.home),
+            () => context.go(AppRoutes.groups),
+            () => context.go(AppRoutes.activity),
+            () => context.go('/profile'),
+          ][i](),
+          onFabTap: () =>
+              context.push('/group/$groupId/expense/add'),
           body: Stack(
             children: [
               Positioned(
@@ -89,7 +226,7 @@ class _GroupDetailBody extends StatelessWidget {
                 left: 0,
                 right: 0,
                 child: Container(
-                  height: 300,
+                  height: context.sh(300),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
@@ -107,7 +244,7 @@ class _GroupDetailBody extends StatelessWidget {
                         child: Opacity(
                           opacity: 0.18,
                           child: Text(group.emoji,
-                              style: const TextStyle(fontSize: 200)),
+                              style: TextStyle(fontSize: context.sp(200))),
                         ),
                       ),
                     ],
@@ -243,53 +380,17 @@ class _GroupDetailBody extends StatelessWidget {
                               Row(children: [
                                 Expanded(
                                   child: PayPactButton(
-                                    onPressed: () {
-                                      // Find the member with the most negative
-                                      // balance (person you owe the most to)
-                                      final balances = loaded.memberBalances;
-                                      String? toUserId;
-                                      String? toUserName;
-                                      double worstBalance = 0;
-                                      balances.forEach((uid, bal) {
-                                        if (bal < worstBalance) {
-                                          worstBalance = bal;
-                                          toUserId = uid;
-                                          toUserName =
-                                              group.memberNames[uid] ??
-                                                  'Member';
-                                        }
-                                      });
-                                      // Fall back to member with largest
-                                      // absolute balance if no negative found
-                                      if (toUserId == null &&
-                                          balances.isNotEmpty) {
-                                        balances.forEach((uid, bal) {
-                                          if (bal.abs() > worstBalance.abs()) {
-                                            worstBalance = bal;
-                                            toUserId = uid;
-                                            toUserName =
-                                                group.memberNames[uid] ??
-                                                    'Member';
-                                          }
-                                        });
-                                        toUserId ??= balances.keys.first;
-                                        toUserName ??=
-                                            group.memberNames[toUserId!] ??
-                                                'Member';
-                                      }
-                                      context.push(
-                                        '/group/$groupId/settle',
-                                        extra: {
-                                          'toUserId': toUserId ?? '',
-                                          'toUserName': toUserName ?? '',
-                                          'suggestedAmount':
-                                              worstBalance.abs(),
-                                          'currency': group.currency,
-                                          'groupName': group.name,
-                                        },
-                                      );
-                                    },
-                                    label: 'Settle up',
+                                    onPressed: loaded.memberBalances.values.any((v) => v.abs() > 0.01)
+                                        ? () => _showSettlePicker(
+                                              context,
+                                              loaded,
+                                              group,
+                                              groupId,
+                                            )
+                                        : null,
+                                    label: loaded.memberBalances.values.any((v) => v.abs() > 0.01)
+                                        ? 'Settle up'
+                                        : "You're settled up",
                                     variant: PayPactButtonVariant.accent,
                                     isFullWidth: true,
                                     leftIcon: Icons.handshake_rounded,
@@ -299,6 +400,28 @@ class _GroupDetailBody extends StatelessWidget {
                             ],
                           ),
                         ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: _SimplifiedDebtsSection(
+                        loaded: loaded,
+                        groupId: groupId,
+                        currency: group.currency,
+                        groupName: group.name,
+                        currentUserId: (context.read<AuthCubit>().state
+                                is AuthAuthenticated)
+                            ? (context.read<AuthCubit>().state
+                                    as AuthAuthenticated)
+                                .user
+                                .id
+                            : '',
+                        currentUserName: (context.read<AuthCubit>().state
+                                is AuthAuthenticated)
+                            ? (context.read<AuthCubit>().state
+                                    as AuthAuthenticated)
+                                .user
+                                .name
+                            : 'You',
                       ),
                     ),
                     SliverToBoxAdapter(
@@ -550,3 +673,256 @@ String _formatDate(DateTime dt) {
 
 String _capitalize(String s) =>
     s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+// ── Debt simplification ────────────────────────────────────────────────────────
+
+class _SimplifiedDebt {
+  final String fromId;
+  final String fromName;
+  final String toId;
+  final String toName;
+  final double amount;
+  const _SimplifiedDebt({
+    required this.fromId,
+    required this.fromName,
+    required this.toId,
+    required this.toName,
+    required this.amount,
+  });
+}
+
+/// Greedy min-transaction algorithm (same as Splitwise).
+/// Positive balance = creditor (owed money), negative = debtor (owes money).
+List<_SimplifiedDebt> _simplifyDebts(
+  Map<String, double> globalBal,
+  Map<String, String> memberNames,
+) {
+  final bal = Map<String, double>.from(globalBal);
+  final result = <_SimplifiedDebt>[];
+  const threshold = 0.01;
+
+  while (true) {
+    String? creditorId;
+    String? debtorId;
+    double maxCredit = threshold;
+    double maxDebt = threshold;
+
+    for (final e in bal.entries) {
+      if (e.value > maxCredit) {
+        maxCredit = e.value;
+        creditorId = e.key;
+      }
+      if (e.value < -maxDebt) {
+        maxDebt = -e.value;
+        debtorId = e.key;
+      }
+    }
+
+    if (creditorId == null || debtorId == null) break;
+
+    final amount = min(maxCredit, maxDebt);
+    result.add(_SimplifiedDebt(
+      fromId: debtorId,
+      fromName: memberNames[debtorId] ?? 'Member',
+      toId: creditorId,
+      toName: memberNames[creditorId] ?? 'Member',
+      amount: amount,
+    ));
+    bal[creditorId] = maxCredit - amount;
+    bal[debtorId] = -maxDebt + amount;
+  }
+
+  return result;
+}
+
+class _SimplifiedDebtsSection extends StatelessWidget {
+  const _SimplifiedDebtsSection({
+    required this.loaded,
+    required this.groupId,
+    required this.currency,
+    required this.groupName,
+    required this.currentUserId,
+    required this.currentUserName,
+  });
+
+  final GroupDetailLoaded loaded;
+  final String groupId;
+  final String currency;
+  final String groupName;
+  final String currentUserId;
+  final String currentUserName;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    final debts = _simplifyDebts(
+      loaded.globalMemberBalances,
+      Map<String, String>.from(loaded.group.memberNames),
+    );
+
+    if (debts.isEmpty) return const SizedBox.shrink();
+
+    String fmtAmt(double v) =>
+        '$currency${v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2)}';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: pt.accentSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: Icon(Icons.auto_awesome_rounded,
+                  size: 15, color: pt.accentInk),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SUGGESTED REPAYMENTS',
+                      style: PayPactTypography.label.copyWith(
+                          color: pt.ink, letterSpacing: 1.4)),
+                  Text(
+                    'Simplified to ${debts.length} payment${debts.length == 1 ? '' : 's'}',
+                    style: PayPactTypography.micro.copyWith(color: pt.ink3),
+                  ),
+                ],
+              ),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          PayPactCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (var i = 0; i < debts.length; i++) ...[
+                  if (i > 0)
+                    Divider(color: pt.border, height: 1, indent: 16, endIndent: 16),
+                  _DebtRow(
+                    debt: debts[i],
+                    currency: currency,
+                    groupId: groupId,
+                    groupName: groupName,
+                    currentUserId: currentUserId,
+                    currentUserName: currentUserName,
+                    fmt: fmtAmt,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DebtRow extends StatelessWidget {
+  const _DebtRow({
+    required this.debt,
+    required this.currency,
+    required this.groupId,
+    required this.groupName,
+    required this.currentUserId,
+    required this.currentUserName,
+    required this.fmt,
+  });
+
+  final _SimplifiedDebt debt;
+  final String currency;
+  final String groupId;
+  final String groupName;
+  final String currentUserId;
+  final String currentUserName;
+  final String Function(double) fmt;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    final isMyDebt = debt.fromId == currentUserId;
+    final isMyCredit = debt.toId == currentUserId;
+    final highlight = isMyDebt || isMyCredit;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(children: [
+        PpAvatar(name: debt.fromName, size: 36),
+        const SizedBox(width: 8),
+        Icon(Icons.arrow_forward_rounded, size: 14, color: pt.ink3),
+        const SizedBox(width: 8),
+        PpAvatar(name: debt.toName, size: 36),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${debt.fromName.split(' ').first} → ${debt.toName.split(' ').first}',
+                style: PayPactTypography.bodyMd.copyWith(
+                  color: pt.ink,
+                  fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+              Text(
+                isMyDebt
+                    ? 'You owe this'
+                    : isMyCredit
+                        ? 'Owed to you'
+                        : '',
+                style: PayPactTypography.micro.copyWith(
+                  color: isMyDebt ? pt.negative : pt.positive,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(fmt(debt.amount),
+            style: PayPactTypography.amountMd.copyWith(
+                color: isMyDebt
+                    ? pt.negative
+                    : isMyCredit
+                        ? pt.positive
+                        : pt.ink,
+                fontWeight: FontWeight.w700,
+                fontSize: 15)),
+        if (isMyDebt) ...[
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: () => context.push(
+              '/group/$groupId/settle',
+              extra: {
+                'fromUserId': currentUserId,
+                'fromUserName': currentUserName,
+                'toUserId': debt.toId,
+                'toUserName': debt.toName,
+                'suggestedAmount': debt.amount,
+                'currency': currency,
+                'groupName': groupName,
+              },
+            ),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: pt.accent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text('Pay',
+                  style: PayPactTypography.label.copyWith(
+                      color: Colors.white, letterSpacing: 0.8)),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+}

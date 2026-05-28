@@ -57,12 +57,15 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
     final netBalance = _myBalance(_latestExpenses, settlements, _currentUserId);
     final memberBalances =
         _memberBalances(_latestExpenses, settlements, group);
+    final globalBalances =
+        _globalMemberBalances(_latestExpenses, settlements, group);
 
     emit(GroupDetailLoaded(
       group: group,
       expenses: _latestExpenses,
       netBalance: netBalance,
       memberBalances: memberBalances,
+      globalMemberBalances: globalBalances,
     ));
   }
 
@@ -78,9 +81,9 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
       }
     }
     for (final s in settlements) {
-      if (s['toUserId'] == userId) {
+      if (s['fromUserId'] == userId) {
         balance += (s['amount'] as num).toDouble();
-      } else if (s['fromUserId'] == userId) {
+      } else if (s['toUserId'] == userId) {
         balance -= (s['amount'] as num).toDouble();
       }
     }
@@ -121,6 +124,27 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
       }
     }
 
+    return bal;
+  }
+
+  Map<String, double> _globalMemberBalances(List<ExpenseEntity> expenses,
+      List<Map<String, dynamic>> settlements, GroupEntity group) {
+    final Map<String, double> bal = {for (final id in group.memberIds) id: 0.0};
+    for (final e in expenses) {
+      for (final split in e.splits) {
+        if (split.userId != e.paidById) {
+          bal[e.paidById] = (bal[e.paidById] ?? 0) + split.amount;
+          bal[split.userId] = (bal[split.userId] ?? 0) - split.amount;
+        }
+      }
+    }
+    for (final s in settlements) {
+      final from = s['fromUserId'] as String;
+      final to = s['toUserId'] as String;
+      final amount = (s['amount'] as num).toDouble();
+      bal[from] = (bal[from] ?? 0) + amount;
+      bal[to] = (bal[to] ?? 0) - amount;
+    }
     return bal;
   }
 

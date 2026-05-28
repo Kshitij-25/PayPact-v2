@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>531387933797-fv558vapve1tpej0v86hiqbcm2sg9536.apps.googleusercontent.com</string>
+	<string>531387933797-6r3upag01ihg89jokos6601s5mlkcg6u.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.531387933797-fv558vapve1tpej0v86hiqbcm2sg9536</string>
+	<string>com.googleusercontent.apps.531387933797-6r3upag01ihg89jokos6601s5mlkcg6u</string>
 	<key>API_KEY</key>
 	<string>AIzaSyCs8kMYqE5N2C_gFkWRwIM51ZMmnElnGlY</string>
 	<key>GCM_SENDER_ID</key>
@@ -13,7 +13,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.paypact.app</string>
+	<string>com.kshitijcodecraft.paypact</string>
 	<key>PROJECT_ID</key>
 	<string>paypact-fec8e</string>
 	<key>STORAGE_BUCKET</key>
@@ -29,6 +29,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:531387933797:ios:e8300e850f99e56a87d28c</string>
+	<string>1:531387933797:ios:0ea51f18ed3d79c187d28c</string>
 </dict>
 </plist>

@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:531387933797:android:3285b4e6fc0aafce87d28c",
+        "mobilesdk_app_id": "1:531387933797:android:f0f579e3d487b35087d28c",
         "android_client_info": {
-          "package_name": "com.paypact.app"
+          "package_name": "com.kshitijcodecraft.paypact"
         }
       },
       "oauth_client": [
@@ -43,9 +43,9 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:531387933797:android:f0f579e3d487b35087d28c",
+        "mobilesdk_app_id": "1:531387933797:android:85c0bb47fb723bc787d28c",
         "android_client_info": {
-          "package_name": "com.kshitijcodecraft.paypact"
+          "package_name": "com.paypact.app"
         }
       },
       "oauth_client": [

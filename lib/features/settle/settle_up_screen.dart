@@ -18,6 +18,8 @@ class SettleUpScreen extends StatelessWidget {
     super.key,
     required this.groupId,
     required this.groupName,
+    required this.fromUserId,
+    required this.fromUserName,
     required this.toUserId,
     required this.toUserName,
     required this.suggestedAmount,
@@ -26,6 +28,8 @@ class SettleUpScreen extends StatelessWidget {
 
   final String groupId;
   final String groupName;
+  final String fromUserId;
+  final String fromUserName;
   final String toUserId;
   final String toUserName;
   final double suggestedAmount;
@@ -41,6 +45,8 @@ class SettleUpScreen extends StatelessWidget {
       child: _SettleUpBody(
         groupId: groupId,
         groupName: groupName,
+        fromUserId: fromUserId,
+        fromUserName: fromUserName,
         toUserId: toUserId,
         toUserName: toUserName,
         suggestedAmount: suggestedAmount,
@@ -54,6 +60,8 @@ class _SettleUpBody extends StatefulWidget {
   const _SettleUpBody({
     required this.groupId,
     required this.groupName,
+    required this.fromUserId,
+    required this.fromUserName,
     required this.toUserId,
     required this.toUserName,
     required this.suggestedAmount,
@@ -62,6 +70,8 @@ class _SettleUpBody extends StatefulWidget {
 
   final String groupId;
   final String groupName;
+  final String fromUserId;
+  final String fromUserName;
   final String toUserId;
   final String toUserName;
   final double suggestedAmount;
@@ -97,8 +107,13 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
   Widget build(BuildContext context) {
     final pt = context.pt;
     final authState = context.watch<AuthCubit>().state;
-    final currentUser =
-        authState is AuthAuthenticated ? authState.user : null;
+    final currentUserId =
+        authState is AuthAuthenticated ? authState.user.id : null;
+
+    // Determine display direction: who is paying whom
+    final bool currentUserIsPaying = widget.fromUserId == currentUserId;
+    final String payerLabel = currentUserIsPaying ? 'You' : widget.fromUserName.split(' ').first;
+    final String receiverLabel = widget.toUserName.split(' ').first;
 
     return BlocListener<SettleCubit, SettleState>(
       listener: (context, state) {
@@ -160,15 +175,13 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
                           Row(children: [
                             Expanded(
                               child: Column(children: [
-                                PpAvatar(
-                                    name: currentUser?.name ?? 'You',
-                                    size: 68),
+                                PpAvatar(name: widget.fromUserName, size: 68),
                                 const SizedBox(height: 8),
                                 Text('FROM',
                                     style: PayPactTypography.label.copyWith(
                                         color: pt.ink3, letterSpacing: 1.5)),
                                 const SizedBox(height: 2),
-                                Text('You',
+                                Text(payerLabel,
                                     style: PayPactTypography.bodyMd.copyWith(
                                         color: pt.ink,
                                         fontWeight: FontWeight.w600)),
@@ -196,7 +209,7 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
                                         color: pt.ink3, letterSpacing: 1.5)),
                                 const SizedBox(height: 2),
                                 Text(
-                                  widget.toUserName.split(' ').first,
+                                  receiverLabel,
                                   style: PayPactTypography.bodyMd.copyWith(
                                       color: pt.ink,
                                       fontWeight: FontWeight.w600),
@@ -304,14 +317,14 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
                     final firstName =
                         widget.toUserName.split(' ').first;
                     return PayPactButton(
-                      onPressed: loading || currentUser == null
+                      onPressed: loading
                           ? null
                           : () {
                               context.read<SettleCubit>().settle(
                                     groupId: widget.groupId,
                                     groupName: widget.groupName,
-                                    fromUserId: currentUser.id,
-                                    fromUserName: currentUser.name,
+                                    fromUserId: widget.fromUserId,
+                                    fromUserName: widget.fromUserName,
                                     toUserId: widget.toUserId,
                                     toUserName: widget.toUserName,
                                     amount: _amount,

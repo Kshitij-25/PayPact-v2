@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:paypact/core/navigation/app_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
@@ -146,7 +147,7 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
                                     .copyWith(color: pt.ink2)),
                             const SizedBox(height: 28),
                             Container(
-                              height: 140,
+                              height: context.sh(140),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(22),
                                 gradient: LinearGradient(
@@ -157,7 +158,7 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
                               ),
                               child: Center(
                                 child: Text(_selectedEmoji,
-                                    style: const TextStyle(fontSize: 54)),
+                                    style: TextStyle(fontSize: context.sp(54))),
                               ),
                             ),
                             const SizedBox(height: 24),

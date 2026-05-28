@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -343,26 +344,26 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                             .copyWith(color: pt.ink3, letterSpacing: 1.6)),
                     const SizedBox(height: 8),
                     SizedBox(
-                      width: 240,
+                      width: context.sw(240),
                       child: TextField(
                         controller: _amountCtrl,
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         textAlign: TextAlign.center,
                         style: PayPactTypography.amountHero
-                            .copyWith(color: pt.accent, fontSize: 52),
+                            .copyWith(color: pt.accent, fontSize: context.sp(52)),
                         decoration: InputDecoration(
                           hintText: '0',
                           hintStyle: PayPactTypography.amountHero.copyWith(
                               color: pt.ink3.withValues(alpha: 0.4),
-                              fontSize: 52),
+                              fontSize: context.sp(52)),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
                           filled: false,
                           prefixText: selectedCur.symbol,
                           prefixStyle: PayPactTypography.amountHero
-                              .copyWith(color: pt.accent, fontSize: 30),
+                              .copyWith(color: pt.accent, fontSize: context.sp(30)),
                           isDense: true,
                         ),
                         onChanged: (_) => setState(() {}),

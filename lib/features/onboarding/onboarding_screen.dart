@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -31,6 +32,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
+
+    if (context.isDesktop) {
+      return _WebLandingPage(onFinish: widget.onFinish);
+    }
+
     return Scaffold(
       backgroundColor: pt.bg,
       body: Stack(
@@ -39,7 +45,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           SafeArea(
             child: Column(
               children: [
-                // Top bar
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                       PayPactSpacing.s6, PayPactSpacing.s3, PayPactSpacing.s6, 0),
@@ -47,15 +52,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     children: [
                       _PactGlyph(),
                       const SizedBox(width: 8),
-                      Text(
-                        'PayPact',
-                        style: PayPactTypography.headingMd.copyWith(color: pt.ink),
-                      ),
+                      Text('PayPact',
+                          style:
+                              PayPactTypography.headingMd.copyWith(color: pt.ink)),
                       const Spacer(),
                       TextButton(
                         onPressed: widget.onFinish,
                         child: Text('Skip',
-                            style: PayPactTypography.bodyMd.copyWith(color: pt.ink2)),
+                            style:
+                                PayPactTypography.bodyMd.copyWith(color: pt.ink2)),
                       ),
                     ],
                   ),
@@ -71,24 +76,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ],
                   ),
                 ),
-                // Bottom CTA + dots
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                       PayPactSpacing.s6, 0, PayPactSpacing.s6, PayPactSpacing.s7),
                   child: Row(
                     children: [
-                      // Dots
                       Row(
-                        children: List.generate(3, (i) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 280),
-                          margin: const EdgeInsets.only(right: 6),
-                          width: i == _i ? 24 : 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: i == _i ? pt.accent : pt.border,
-                            borderRadius: BorderRadius.circular(99),
+                        children: List.generate(
+                          3,
+                          (i) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 280),
+                            margin: const EdgeInsets.only(right: 6),
+                            width: i == _i ? 24 : 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: i == _i ? pt.accent : pt.border,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
                           ),
-                        )),
+                        ),
                       ),
                       const Spacer(),
                       PayPactButton(
@@ -103,6 +109,365 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Web landing page ──────────────────────────────────────────────────────────
+
+class _WebLandingPage extends StatelessWidget {
+  const _WebLandingPage({this.onFinish});
+  final VoidCallback? onFinish;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+
+    return Scaffold(
+      backgroundColor: pt.bg,
+      body: Stack(
+        children: [
+          const PpBackdropGlow(intensity: 0.15),
+          Column(
+            children: [
+              // ── Nav bar ────────────────────────────────────────────────────
+              Container(
+                height: 64,
+                padding: const EdgeInsets.symmetric(horizontal: 48),
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: pt.border)),
+                ),
+                child: Row(
+                  children: [
+                    _PactGlyph(),
+                    const SizedBox(width: 10),
+                    Text('PayPact',
+                        style: PayPactTypography.headingMd
+                            .copyWith(color: pt.ink, fontWeight: FontWeight.w700)),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: onFinish,
+                      child: Text('Sign in',
+                          style: PayPactTypography.bodyMd
+                              .copyWith(color: pt.ink2, fontWeight: FontWeight.w500)),
+                    ),
+                    const SizedBox(width: 8),
+                    PayPactButton(
+                      onPressed: onFinish,
+                      label: 'Get started',
+                      variant: PayPactButtonVariant.accent,
+                      rightIcon: Icons.arrow_forward_rounded,
+                    ),
+                  ],
+                ),
+              ),
+
+              // ── Hero ───────────────────────────────────────────────────────
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 80),
+                      // Eyebrow chip
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: pt.accentSoft,
+                          borderRadius: PayPactRadius.full,
+                          border: Border.all(
+                              color: pt.accent.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                  color: pt.accent, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 8),
+                            Text('Quiet money between friends',
+                                style: PayPactTypography.label.copyWith(
+                                    color: pt.accent, letterSpacing: 1.4)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      // Headline
+                      Text(
+                        'Money between friends,\nfinally quiet.',
+                        textAlign: TextAlign.center,
+                        style: PayPactTypography.displayXl.copyWith(
+                          color: pt.ink,
+                          fontSize: 56,
+                          height: 1.12,
+                          letterSpacing: -0.035 * 56,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Subtitle
+                      SizedBox(
+                        width: 480,
+                        child: Text(
+                          'Split expenses, settle debts, and stay in sync with the people you share life with — without the awkward reminders.',
+                          textAlign: TextAlign.center,
+                          style: PayPactTypography.bodyLg.copyWith(
+                              color: pt.ink2, height: 1.6, fontSize: 17),
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+                      // CTAs
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          PayPactButton(
+                            onPressed: onFinish,
+                            label: 'Create free account',
+                            variant: PayPactButtonVariant.accent,
+                            size: PayPactButtonSize.large,
+                            rightIcon: Icons.arrow_forward_rounded,
+                          ),
+                          const SizedBox(width: 12),
+                          PayPactButton(
+                            onPressed: onFinish,
+                            label: 'Sign in',
+                            variant: PayPactButtonVariant.secondary,
+                            size: PayPactButtonSize.large,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Free forever · No credit card needed',
+                          style: PayPactTypography.bodySm
+                              .copyWith(color: pt.ink3)),
+                      const SizedBox(height: 72),
+
+                      // ── Feature strip ──────────────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 80),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FeatureCard(
+                              icon: Icons.account_balance_wallet_outlined,
+                              title: 'Track every split',
+                              body:
+                                  'Add expenses in seconds. PayPact automatically calculates who owes what across all your groups.',
+                              pt: pt,
+                            ),
+                            const SizedBox(width: 20),
+                            _FeatureCard(
+                              icon: Icons.handshake_outlined,
+                              title: 'Settle in a tap',
+                              body:
+                                  'Smart reminders that respect the room. No late-fee energy — just a gentle nudge when it matters.',
+                              pt: pt,
+                            ),
+                            const SizedBox(width: 20),
+                            _FeatureCard(
+                              icon: Icons.lock_outline_rounded,
+                              title: 'Private by design',
+                              body:
+                                  'End-to-end encrypted. No social feed, no ads, no public expense history. Just your circle.',
+                              pt: pt,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 72),
+
+                      // ── Dashboard preview card ─────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 80),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(40),
+                          decoration: BoxDecoration(
+                            color: pt.ink,
+                            borderRadius: PayPactRadius.xl,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('NET BALANCE',
+                                        style: PayPactTypography.label.copyWith(
+                                            color: Colors.white54,
+                                            letterSpacing: 1.6)),
+                                    const SizedBox(height: 12),
+                                    Text('+₹2,340',
+                                        style: PayPactTypography.amountHero
+                                            .copyWith(
+                                                color: Colors.white,
+                                                fontSize: 48,
+                                                letterSpacing: -0.045 * 48)),
+                                    const SizedBox(height: 8),
+                                    Text('across 3 groups · all on track',
+                                        style: PayPactTypography.bodyMd
+                                            .copyWith(
+                                                color: Colors.white38)),
+                                    const SizedBox(height: 24),
+                                    Wrap(
+                                      spacing: 10,
+                                      runSpacing: 10,
+                                      children: [
+                                        _DarkChip('🏖️ Goa trip · ₹1,200', Colors.white70),
+                                        _DarkChip('🍕 Friday dinners · ₹640', Colors.white70),
+                                        _DarkChip('🏠 Flat rent · ₹500', Colors.white70),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 40),
+                              Column(
+                                children: [
+                                  _MiniReceipt(
+                                      label: 'Maya paid',
+                                      amount: '₹1,200',
+                                      positive: true,
+                                      pt: pt),
+                                  const SizedBox(height: 10),
+                                  _MiniReceipt(
+                                      label: 'You owe Rohan',
+                                      amount: '₹540',
+                                      positive: false,
+                                      pt: pt),
+                                  const SizedBox(height: 10),
+                                  _MiniReceipt(
+                                      label: 'Settled ✓',
+                                      amount: '₹820',
+                                      positive: true,
+                                      pt: pt),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 80),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeatureCard extends StatelessWidget {
+  const _FeatureCard({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.pt,
+  });
+  final IconData icon;
+  final String title;
+  final String body;
+  final PayPactThemeExtension pt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: pt.surface,
+          borderRadius: PayPactRadius.lg,
+          border: Border.all(color: pt.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                  color: pt.accentSoft, borderRadius: PayPactRadius.md),
+              alignment: Alignment.center,
+              child: Icon(icon, color: pt.accent, size: 20),
+            ),
+            const SizedBox(height: 16),
+            Text(title,
+                style: PayPactTypography.headingMd
+                    .copyWith(color: pt.ink, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(body,
+                style: PayPactTypography.bodyMd
+                    .copyWith(color: pt.ink2, height: 1.55)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DarkChip extends StatelessWidget {
+  const _DarkChip(this.label, this.color);
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Text(label,
+          style: PayPactTypography.bodySm
+              .copyWith(color: color, fontWeight: FontWeight.w500)),
+    );
+  }
+}
+
+class _MiniReceipt extends StatelessWidget {
+  const _MiniReceipt({
+    required this.label,
+    required this.amount,
+    required this.positive,
+    required this.pt,
+  });
+  final String label;
+  final String amount;
+  final bool positive;
+  final PayPactThemeExtension pt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 200,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: PayPactRadius.md,
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label,
+                style: PayPactTypography.bodySm
+                    .copyWith(color: Colors.white60)),
+          ),
+          Text(amount,
+              style: PayPactTypography.amountMd.copyWith(
+                  color: positive
+                      ? const Color(0xFF7EC8A4)
+                      : const Color(0xFFE07B6A))),
         ],
       ),
     );

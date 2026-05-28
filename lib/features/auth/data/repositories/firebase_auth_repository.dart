@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:paypact/features/auth/data/models/user_model.dart';
 import 'package:paypact/features/auth/domain/entities/user_entity.dart';
@@ -16,8 +17,7 @@ class FirebaseAuthRepository implements AuthRepository {
     return _auth.authStateChanges().asyncMap((fbUser) async {
       if (fbUser == null) return null;
       try {
-        final doc =
-            await _firestore.collection('users').doc(fbUser.uid).get();
+        final doc = await _firestore.collection('users').doc(fbUser.uid).get();
         if (doc.exists) {
           return UserModel.fromFirestore(doc);
         }
@@ -96,23 +96,32 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<UserEntity> signInWithGoogle() async {
-    final googleSignIn = GoogleSignIn.instance;
-    // initialize is idempotent – safe to call each time
-    await googleSignIn.initialize();
-    final googleUser = await googleSignIn.authenticate();
-    final idToken = googleUser.authentication.idToken;
-    if (idToken == null) throw Exception('Google sign-in: no idToken returned');
+    fb.UserCredential userCredential;
 
-    final credential = fb.GoogleAuthProvider.credential(idToken: idToken);
-    final userCredential = await _auth.signInWithCredential(credential);
+    if (kIsWeb) {
+      final provider = fb.GoogleAuthProvider()
+        ..addScope('email')
+        ..addScope('profile');
+      userCredential = await _auth.signInWithPopup(provider);
+    } else {
+      await GoogleSignIn.instance.initialize();
+      final googleUser = await GoogleSignIn.instance.authenticate();
+      final idToken = googleUser.authentication.idToken;
+      if (idToken == null) {
+        throw Exception('Google sign-in: no idToken returned');
+      }
+      final credential = fb.GoogleAuthProvider.credential(idToken: idToken);
+      userCredential = await _auth.signInWithCredential(credential);
+    }
+
     final fbUser = userCredential.user!;
 
     final docRef = _firestore.collection('users').doc(fbUser.uid);
     final doc = await docRef.get();
     final model = UserModel(
       id: fbUser.uid,
-      name: fbUser.displayName ?? googleUser.displayName ?? '',
-      email: fbUser.email ?? googleUser.email,
+      name: fbUser.displayName ?? '',
+      email: fbUser.email ?? '',
       photoUrl: fbUser.photoURL,
     );
     if (!doc.exists) {

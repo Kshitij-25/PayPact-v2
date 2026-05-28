@@ -260,6 +260,8 @@ final appRouter = GoRouter(
                   child: SettleUpScreen(
                     groupId: groupId,
                     groupName: extra?['groupName'] as String? ?? '',
+                    fromUserId: extra?['fromUserId'] as String? ?? '',
+                    fromUserName: extra?['fromUserName'] as String? ?? 'You',
                     toUserId: extra?['toUserId'] as String? ?? '',
                     toUserName: extra?['toUserName'] as String? ?? '',
                     suggestedAmount:
