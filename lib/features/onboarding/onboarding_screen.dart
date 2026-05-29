@@ -193,14 +193,6 @@ class _WebLandingPage extends StatelessWidget {
     );
   }
 
-  Widget _navLink(PayPactThemeExtension pt, String label) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 13),
-      child:
-          Text(label, style: PayPactTypography.bodyMd.copyWith(color: pt.ink2)),
-    );
-  }
-
   // ── Hero ─────────────────────────────────────────────────────────────
   Widget _buildHero(BuildContext context, PayPactThemeExtension pt, double w) {
     final heroFont = (w * 0.052).clamp(40.0, 62.0);

@@ -30,7 +30,8 @@ class AddMembersCubit extends Cubit<AddMembersState> {
       return;
     }
     emit(AddMembersSearching(q));
-    _debounce = Timer(const Duration(milliseconds: 350), () => _runSearch(q, existingMemberIds));
+    _debounce = Timer(const Duration(milliseconds: 350),
+        () => _runSearch(q, existingMemberIds));
   }
 
   Future<void> _runSearch(String q, Set<String> existingMemberIds) async {
@@ -51,7 +52,7 @@ class AddMembersCubit extends Cubit<AddMembersState> {
 
       // name prefix search if no email hits
       if (results.isEmpty) {
-        final end = q + '';
+        final end = '$q';
         final nameSnap = await _firestore
             .collection('users')
             .orderBy('name')
