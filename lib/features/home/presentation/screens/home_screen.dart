@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/app_router.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
@@ -38,14 +39,16 @@ String _fmtAmt(double amount, String symbol) {
   return '$symbol$grouped';
 }
 
+String _currentMonthLabel() =>
+    DateFormat('MMMM').format(DateTime.now()).toUpperCase();
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthCubit>().state;
-    final userId =
-        authState is AuthAuthenticated ? authState.user.id : '';
+    final userId = authState is AuthAuthenticated ? authState.user.id : '';
 
     return BlocProvider(
       create: (_) => GroupsCubit(
@@ -86,16 +89,18 @@ class _HomeBodyState extends State<_HomeBody> {
 
     return BlocBuilder<GroupsCubit, GroupsState>(
       builder: (context, state) {
-        final groups =
-            state is GroupsLoaded ? state.groups : <GroupEntity>[];
+        final groups = state is GroupsLoaded ? state.groups : <GroupEntity>[];
         final totalBalance =
             state is GroupsLoaded ? state.totalNetBalance : 0.0;
-        final weeklyDelta =
-            state is GroupsLoaded ? state.weeklyDelta : 0.0;
-        final nudge =
-            state is GroupsLoaded ? state.smartNudge : null;
-        final recentExpenses =
-            state is GroupsLoaded ? state.recentExpenses : <RecentExpenseItem>[];
+        final weeklyDelta = state is GroupsLoaded ? state.weeklyDelta : 0.0;
+        final nudge = state is GroupsLoaded ? state.smartNudge : null;
+        final recentExpenses = state is GroupsLoaded
+            ? state.recentExpenses
+            : <RecentExpenseItem>[];
+        final memberBalances = state is GroupsLoaded
+            ? state.memberBalances
+            : <MemberBalanceItem>[];
+        final avgSettleDays = state is GroupsLoaded ? state.avgSettleDays : 0.0;
         final loading = state is GroupsLoading;
 
         final webTitle = loading
@@ -118,7 +123,7 @@ class _HomeBodyState extends State<_HomeBody> {
           webSubtitle: groups.isEmpty
               ? 'Create your first group to get started.'
               : 'Across ${groups.length} group${groups.length == 1 ? '' : 's'} · Stay on top of your splits.',
-          webActionLabel: 'Add expense',
+          webActionLabel: 'Create Group',
           webActionOnTap: () => context.push('/group/create'),
           webUserName: userName,
           webBalance: PpAmount.format(totalBalance.round(), signed: true),
@@ -130,6 +135,8 @@ class _HomeBodyState extends State<_HomeBody> {
                   weeklyDelta: weeklyDelta,
                   nudge: nudge,
                   recentExpenses: recentExpenses,
+                  memberBalances: memberBalances,
+                  avgSettleDays: avgSettleDays,
                   loading: loading,
                   nudgeDismissed: _nudgeDismissed,
                   onDismissNudge: () => setState(() => _nudgeDismissed = true),
@@ -193,11 +200,8 @@ class _MobileHomeBody extends StatelessWidget {
             padding: EdgeInsets.zero,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    PayPactSpacing.s6,
-                    PayPactSpacing.s2,
-                    PayPactSpacing.s6,
-                    PayPactSpacing.s4),
+                padding: const EdgeInsets.fromLTRB(PayPactSpacing.s6,
+                    PayPactSpacing.s2, PayPactSpacing.s6, PayPactSpacing.s4),
                 child: Row(
                   children: [
                     PpAvatar(name: userName, size: 42),
@@ -235,9 +239,9 @@ class _MobileHomeBody extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('NET BALANCE',
-                        style: PayPactTypography.label.copyWith(
-                            color: pt.ink3, letterSpacing: 1.6)),
+                    Text('NET BALANCE · ${_currentMonthLabel()}',
+                        style: PayPactTypography.label
+                            .copyWith(color: pt.ink3, letterSpacing: 1.6)),
                     const SizedBox(height: 10),
                     loading
                         ? Container(
@@ -249,13 +253,11 @@ class _MobileHomeBody extends StatelessWidget {
                             ),
                           )
                         : Text(
-                            PpAmount.format(totalBalance.round(),
-                                signed: true),
+                            PpAmount.format(totalBalance.round(), signed: true),
                             style: PayPactTypography.amountHero.copyWith(
                                 color: pt.ink,
                                 fontSize: context.sp(64),
-                                letterSpacing:
-                                    -0.045 * context.sp(64)),
+                                letterSpacing: -0.045 * context.sp(64)),
                           ),
                     const SizedBox(height: 8),
                     loading
@@ -279,8 +281,8 @@ class _MobileHomeBody extends StatelessWidget {
                                   final owing = groups
                                       .where((g) => g.netBalance < 0)
                                       .toList()
-                                    ..sort((a, b) => a.netBalance
-                                        .compareTo(b.netBalance));
+                                    ..sort((a, b) =>
+                                        a.netBalance.compareTo(b.netBalance));
                                   final target = owing.isNotEmpty
                                       ? owing.first
                                       : groups.first;
@@ -343,8 +345,7 @@ class _MobileHomeBody extends StatelessWidget {
                       onDismissNudge();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(
-                              'Nudge sent to ${nudge!.memberName}!'),
+                          content: Text('Nudge sent to ${nudge!.memberName}!'),
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
@@ -387,6 +388,8 @@ class _WebHomeBody extends StatelessWidget {
     required this.weeklyDelta,
     required this.nudge,
     required this.recentExpenses,
+    required this.memberBalances,
+    required this.avgSettleDays,
     required this.loading,
     required this.nudgeDismissed,
     required this.onDismissNudge,
@@ -398,6 +401,8 @@ class _WebHomeBody extends StatelessWidget {
   final double weeklyDelta;
   final SmartNudgeData? nudge;
   final List<RecentExpenseItem> recentExpenses;
+  final List<MemberBalanceItem> memberBalances;
+  final double avgSettleDays;
   final bool loading;
   final bool nudgeDismissed;
   final VoidCallback onDismissNudge;
@@ -406,6 +411,22 @@ class _WebHomeBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
+    final month = _currentMonthLabel();
+    final activeGroups = groups.where((g) => g.netBalance != 0).length;
+
+    // Last expense per group, for web group tiles
+    final Map<String, RecentExpenseItem> lastByGroup = {};
+    for (final e in recentExpenses) {
+      lastByGroup.putIfAbsent(e.groupId, () => e);
+    }
+
+    void settleUp() {
+      if (groups.isEmpty) return;
+      final owing = groups.where((g) => g.netBalance < 0).toList()
+        ..sort((a, b) => a.netBalance.compareTo(b.netBalance));
+      context
+          .push('/group/${(owing.isNotEmpty ? owing.first : groups.first).id}');
+    }
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,76 +434,181 @@ class _WebHomeBody extends StatelessWidget {
         // ── Left column ──────────────────────────────────────────────────────
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(48),
+            padding: const EdgeInsets.fromLTRB(36, 32, 36, 48),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Balance hero card
+                // ── Balance card ─────────────────────────────────────────────
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(32),
+                  padding: const EdgeInsets.all(28),
                   decoration: BoxDecoration(
-                    color: pt.ink,
+                    color: pt.surface,
                     borderRadius: PayPactRadius.lg,
+                    border: Border.all(color: pt.border),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('NET BALANCE',
-                          style: PayPactTypography.label.copyWith(
-                              color: Colors.white54, letterSpacing: 1.6)),
-                      const SizedBox(height: 12),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('NET BALANCE · $month',
+                              style: PayPactTypography.label.copyWith(
+                                  color: pt.ink3, letterSpacing: 1.6)),
+                          const Spacer(),
+                          if (!loading) ...[
+                            PayPactButton(
+                              onPressed: groups.isEmpty ? null : settleUp,
+                              label: 'Settle up',
+                              variant: PayPactButtonVariant.accent,
+                              leftIcon: Icons.handshake_rounded,
+                            ),
+                            const SizedBox(width: 8),
+                            PayPactButton(
+                              onPressed: () => context.push('/insights'),
+                              label: 'Insights',
+                              variant: PayPactButtonVariant.secondary,
+                              leftIcon: Icons.donut_small_rounded,
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       loading
                           ? Container(
-                              height: 56,
-                              width: 200,
+                              height: 64,
+                              width: 220,
                               decoration: BoxDecoration(
-                                color: Colors.white12,
-                                borderRadius: PayPactRadius.sm,
+                                color: pt.surfaceAlt,
+                                borderRadius: PayPactRadius.md,
                               ),
                             )
                           : Text(
                               PpAmount.format(totalBalance.round(),
                                   signed: true),
                               style: PayPactTypography.amountHero.copyWith(
-                                color: Colors.white,
+                                color: pt.ink,
                                 fontSize: 56,
                                 letterSpacing: -0.045 * 56,
                               ),
                             ),
                       const SizedBox(height: 8),
                       if (!loading && groups.isNotEmpty)
-                        Text(
-                          'Across ${groups.length} group${groups.length == 1 ? '' : 's'}',
-                          style: PayPactTypography.bodyMd
-                              .copyWith(color: Colors.white54),
+                        _BalanceSubtitle(
+                          groups: groups,
+                          totalBalance: totalBalance,
+                          weeklyDelta: weeklyDelta,
                         ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 16),
 
-                // Groups grid header
+                // ── Activity chart card ──────────────────────────────────────
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                  decoration: BoxDecoration(
+                    color: pt.surface,
+                    borderRadius: PayPactRadius.lg,
+                    border: Border.all(color: pt.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text('LAST 7 DAYS',
+                              style: PayPactTypography.label.copyWith(
+                                  color: pt.ink3, letterSpacing: 1.6)),
+                          const Spacer(),
+                          RichText(
+                            text: TextSpan(
+                              style: PayPactTypography.bodySm
+                                  .copyWith(color: pt.ink3),
+                              children: [
+                                const TextSpan(text: 'Avg settle time: '),
+                                TextSpan(
+                                  text: avgSettleDays > 0
+                                      ? '${avgSettleDays.toStringAsFixed(1)} days'
+                                      : '--',
+                                  style: PayPactTypography.bodySm.copyWith(
+                                      color: pt.ink,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 64,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            for (final day in [
+                              'M',
+                              'T',
+                              'W',
+                              'T',
+                              'F',
+                              'S',
+                              'S'
+                            ])
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Expanded(
+                                      child: Center(
+                                        child: Container(
+                                          width: 4,
+                                          height: 0,
+                                          color: pt.border,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(day,
+                                        style: PayPactTypography.micro
+                                            .copyWith(color: pt.ink3)),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // ── Groups section ───────────────────────────────────────────
                 Row(
                   children: [
-                    Text('YOUR GROUPS',
-                        style: PayPactTypography.label.copyWith(
-                            color: pt.ink3, letterSpacing: 1.6)),
+                    Text(
+                      'YOUR GROUPS${activeGroups > 0 ? ' · $activeGroups ACTIVE' : ''}',
+                      style: PayPactTypography.label
+                          .copyWith(color: pt.ink3, letterSpacing: 1.6),
+                    ),
                     const Spacer(),
                     GestureDetector(
                       onTap: () => context.go(AppRoutes.groups),
-                      child: Text('See all →',
-                          style: PayPactTypography.bodySm
-                              .copyWith(color: pt.accent)),
+                      child: Text(
+                        'See all ${groups.length} →',
+                        style:
+                            PayPactTypography.bodySm.copyWith(color: pt.accent),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
 
-                // Groups grid — 4 columns
                 loading
                     ? const SizedBox(
-                        height: 120,
+                        height: 200,
                         child: Center(child: CircularProgressIndicator()))
                     : groups.isEmpty
                         ? Container(
@@ -498,46 +624,36 @@ class _WebHomeBody extends StatelessWidget {
                                       .copyWith(color: pt.ink3)),
                             ),
                           )
-                        : GridView.count(
-                            crossAxisCount: 4,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 0.85,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            children: [
-                              for (final g in groups.take(7))
+                        : SizedBox(
+                            height: 200,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                for (final g in groups.take(8)) ...[
+                                  GestureDetector(
+                                    onTap: () => context.push('/group/${g.id}'),
+                                    child: _WebGroupTile(
+                                      group: g,
+                                      lastExpense: lastByGroup[g.id],
+                                      relativeTime: lastByGroup[g.id] != null
+                                          ? relativeTime(
+                                              lastByGroup[g.id]!.createdAt)
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                ],
                                 GestureDetector(
-                                  onTap: () =>
-                                      context.push('/group/${g.id}'),
-                                  child: _GroupTile(group: g),
+                                  onTap: () => context.push('/group/create'),
+                                  child: _AddGroupTile(),
                                 ),
-                              GestureDetector(
-                                onTap: () =>
-                                    context.push('/group/create'),
-                                child: _AddGroupTile(),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 28),
 
-                // Recent activity
-                if (recentExpenses.isNotEmpty) ...[
-                  Row(
-                    children: [
-                      Text('RECENT ACTIVITY',
-                          style: PayPactTypography.label.copyWith(
-                              color: pt.ink3, letterSpacing: 1.6)),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () => context.go(AppRoutes.activity),
-                        child: Text('View all →',
-                            style: PayPactTypography.bodySm
-                                .copyWith(color: pt.accent)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
+                // ── Recent activity card ─────────────────────────────────────
+                if (recentExpenses.isNotEmpty)
                   Container(
                     decoration: BoxDecoration(
                       color: pt.surface,
@@ -545,28 +661,54 @@ class _WebHomeBody extends StatelessWidget {
                       border: Border.all(color: pt.border),
                     ),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (int i = 0;
-                            i < recentExpenses.length;
-                            i++) ...[
-                          if (i > 0)
-                            Divider(color: pt.border, height: 1),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Recent activity',
+                                      style: PayPactTypography.headingMd
+                                          .copyWith(color: pt.ink)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Last 24 hours · ${recentExpenses.length} events',
+                                    style: PayPactTypography.bodySm
+                                        .copyWith(color: pt.ink3),
+                                  ),
+                                ],
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () => context.go(AppRoutes.activity),
+                                child: Text('Full feed →',
+                                    style: PayPactTypography.bodySm
+                                        .copyWith(color: pt.accent)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Divider(color: pt.border, height: 1),
+                        for (int i = 0; i < recentExpenses.length; i++) ...[
+                          if (i > 0) Divider(color: pt.border, height: 1),
                           _WebRecentRow(
                             item: recentExpenses[i],
                             relativeTime:
                                 relativeTime(recentExpenses[i].createdAt),
                             onTap: () => context.push(
                               '/expense/${recentExpenses[i].expenseId}',
-                              extra: {
-                                'groupId': recentExpenses[i].groupId
-                              },
+                              extra: {'groupId': recentExpenses[i].groupId},
                             ),
                           ),
                         ],
                       ],
                     ),
                   ),
-                ],
               ],
             ),
           ),
@@ -577,9 +719,9 @@ class _WebHomeBody extends StatelessWidget {
 
         // ── Right column ─────────────────────────────────────────────────────
         SizedBox(
-          width: 360,
+          width: 340,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -587,80 +729,79 @@ class _WebHomeBody extends StatelessWidget {
                 if (!nudgeDismissed && nudge != null) ...[
                   _SmartNudgeCard(
                     nudge: nudge!,
+                    dark: true,
                     onLater: onDismissNudge,
                     onNudge: () {
                       onDismissNudge();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(
-                              'Nudge sent to ${nudge!.memberName}!'),
+                          content: Text('Nudge sent to ${nudge!.memberName}!'),
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
                     },
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                 ],
 
                 // Quick actions
                 Text('QUICK ACTIONS',
-                    style: PayPactTypography.label.copyWith(
-                        color: pt.ink3, letterSpacing: 1.6)),
+                    style: PayPactTypography.label
+                        .copyWith(color: pt.ink3, letterSpacing: 1.6)),
                 const SizedBox(height: 12),
-                GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 1.4,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _QuickAction(
-                      icon: Icons.add_rounded,
-                      label: 'Add expense',
-                      onTap: () => context.push('/group/create'),
-                      pt: pt,
-                    ),
-                    _QuickAction(
-                      icon: Icons.handshake_rounded,
-                      label: 'Settle up',
-                      onTap: () {
-                        if (groups.isNotEmpty) {
-                          final owing = groups
-                              .where((g) => g.netBalance < 0)
-                              .toList()
-                            ..sort((a, b) =>
-                                a.netBalance.compareTo(b.netBalance));
-                          final target = owing.isNotEmpty
-                              ? owing.first
-                              : groups.first;
-                          context.push('/group/${target.id}');
-                        }
-                      },
-                      pt: pt,
-                    ),
-                    _QuickAction(
-                      icon: Icons.donut_small_rounded,
-                      label: 'Insights',
-                      onTap: () => context.push('/insights'),
-                      pt: pt,
-                    ),
-                    _QuickAction(
-                      icon: Icons.group_add_rounded,
-                      label: 'New group',
-                      onTap: () => context.push('/group/create'),
-                      pt: pt,
-                    ),
-                  ],
+                Container(
+                  decoration: BoxDecoration(
+                    color: pt.surface,
+                    borderRadius: PayPactRadius.lg,
+                    border: Border.all(color: pt.border),
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  child: GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 1.7,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      _QuickAction(
+                        icon: Icons.group_add_rounded,
+                        label: 'New group',
+                        onTap: () => context.push('/group/create'),
+                        pt: pt,
+                      ),
+                      _QuickAction(
+                        icon: Icons.ios_share_rounded,
+                        label: 'Share invite',
+                        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Share invite — coming soon'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        ),
+                        pt: pt,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
-                // Open balances
-                if (groups.any((g) => g.netBalance != 0)) ...[
-                  Text('OPEN BALANCES',
-                      style: PayPactTypography.label.copyWith(
-                          color: pt.ink3, letterSpacing: 1.6)),
-                  const SizedBox(height: 12),
+                // Open balances — per member
+                if (memberBalances.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Text('Open balances',
+                          style: PayPactTypography.headingMd
+                              .copyWith(color: pt.ink)),
+                      const Spacer(),
+                      Text(
+                        '${memberBalances.length} ${memberBalances.length == 1 ? 'person' : 'people'}',
+                        style:
+                            PayPactTypography.bodySm.copyWith(color: pt.ink3),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   Container(
                     decoration: BoxDecoration(
                       color: pt.surface,
@@ -669,41 +810,67 @@ class _WebHomeBody extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        for (final g in groups
-                            .where((g) => g.netBalance != 0)
-                            .take(5)
-                            .toList()
-                          ..sort((a, b) => a.netBalance
-                              .abs()
-                              .compareTo(b.netBalance.abs()) * -1)) ...[
-                          if (g !=
-                              groups
-                                  .where((g) => g.netBalance != 0)
-                                  .first)
-                            Divider(color: pt.border, height: 1),
+                        for (int i = 0;
+                            i < memberBalances.take(5).length;
+                            i++) ...[
+                          if (i > 0) Divider(color: pt.border, height: 1),
                           Padding(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 12),
                             child: Row(
                               children: [
-                                Text(g.emoji,
-                                    style:
-                                        const TextStyle(fontSize: 20)),
+                                PpAvatar(
+                                    name: memberBalances[i].name, size: 34),
                                 const SizedBox(width: 10),
                                 Expanded(
-                                  child: Text(g.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: PayPactTypography.bodyMd
-                                          .copyWith(color: pt.ink)),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(memberBalances[i].name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: PayPactTypography.bodyMd
+                                              .copyWith(
+                                                  color: pt.ink,
+                                                  fontWeight: FontWeight.w500)),
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              memberBalances[i].groupName,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: PayPactTypography.micro
+                                                  .copyWith(color: pt.ink3),
+                                            ),
+                                          ),
+                                          if (memberBalances[i].daysSilent >=
+                                                  3 &&
+                                              memberBalances[i].netBalance >
+                                                  0) ...[
+                                            const SizedBox(width: 4),
+                                            Icon(Icons.notifications_outlined,
+                                                size: 10, color: pt.ink3),
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              '${memberBalances[i].daysSilent}d',
+                                              style: PayPactTypography.micro
+                                                  .copyWith(color: pt.ink3),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
                                 Text(
                                   PpAmount.format(
-                                      g.netBalance.round(),
+                                      memberBalances[i].netBalance.round(),
                                       signed: true),
-                                  style: PayPactTypography.amountMd
-                                      .copyWith(
-                                    color: g.netBalance >= 0
+                                  style: PayPactTypography.amountMd.copyWith(
+                                    color: memberBalances[i].netBalance >= 0
                                         ? pt.positive
                                         : pt.negative,
                                   ),
@@ -748,8 +915,7 @@ class _WebRecentRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         child: Row(
           children: [
-            Text(item.groupEmoji,
-                style: const TextStyle(fontSize: 20)),
+            Text(item.groupEmoji, style: const TextStyle(fontSize: 20)),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -761,16 +927,14 @@ class _WebRecentRow extends StatelessWidget {
                       style: PayPactTypography.bodyMd.copyWith(
                           color: pt.ink, fontWeight: FontWeight.w500)),
                   Text('${item.groupName} · $relativeTime',
-                      style: PayPactTypography.bodySm
-                          .copyWith(color: pt.ink3)),
+                      style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
                 ],
               ),
             ),
             const SizedBox(width: 16),
             Text(
               _fmtAmt(item.amount, sym),
-              style:
-                  PayPactTypography.amountMd.copyWith(color: pt.ink),
+              style: PayPactTypography.amountMd.copyWith(color: pt.ink),
             ),
           ],
         ),
@@ -809,8 +973,8 @@ class _QuickAction extends StatelessWidget {
           children: [
             Icon(icon, color: pt.accent, size: 20),
             Text(label,
-                style: PayPactTypography.bodyMd.copyWith(
-                    color: pt.ink, fontWeight: FontWeight.w600)),
+                style: PayPactTypography.bodyMd
+                    .copyWith(color: pt.ink, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -834,27 +998,26 @@ class _BalanceSubtitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
-    final gLabel =
-        '${groups.length} group${groups.length == 1 ? '' : 's'}';
-    final prefix = totalBalance >= 0
-        ? "You'll get back across "
-        : "You owe across ";
+    final gLabel = '${groups.length} group${groups.length == 1 ? '' : 's'}';
+    final prefix =
+        totalBalance >= 0 ? "You'll get back across " : "You owe across ";
 
     final showTrend = weeklyDelta.abs() >= 1;
-    final trendColor =
-        weeklyDelta > 0 ? pt.positive : pt.negative;
+    final trendColor = weeklyDelta > 0 ? pt.positive : pt.negative;
     final trendArrow = weeklyDelta > 0 ? '↑' : '↓';
     final trendAmt = PpAmount.format(weeklyDelta.abs().round());
+    final baseColor = pt.ink2;
+    final emphColor = pt.ink;
 
     return RichText(
       text: TextSpan(
-        style: PayPactTypography.bodyMd.copyWith(color: pt.ink2),
+        style: PayPactTypography.bodyMd.copyWith(color: baseColor),
         children: [
           TextSpan(text: prefix),
           TextSpan(
             text: gLabel,
-            style: PayPactTypography.bodyMd.copyWith(
-                color: pt.ink, fontWeight: FontWeight.w600),
+            style: PayPactTypography.bodyMd
+                .copyWith(color: emphColor, fontWeight: FontWeight.w600),
           ),
           if (showTrend) ...[
             const TextSpan(text: ' · '),
@@ -876,27 +1039,129 @@ class _SmartNudgeCard extends StatelessWidget {
     required this.nudge,
     required this.onNudge,
     required this.onLater,
+    this.dark = false,
   });
 
   final SmartNudgeData nudge;
   final VoidCallback onNudge;
   final VoidCallback onLater;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     const amber = Color(0xFFE8963A);
-    final bgColor =
-        isDark ? const Color(0xFF2A1F0E) : const Color(0xFFFFF5EA);
-    final borderColor =
-        isDark ? const Color(0xFF4A3010) : const Color(0xFFFFD9A0);
 
     final sym = currencySymbol(nudge.currency);
     final amtStr = _fmtAmt(nudge.amountOwed, sym);
-    final message = nudge.daysSilent > 0
-        ? '${nudge.memberName} still owes $amtStr from the ${nudge.groupName}. It\'s been quiet for ${nudge.daysSilent} days.'
-        : '${nudge.memberName} still owes $amtStr from the ${nudge.groupName}. No settlements yet.';
+    final shortMsg =
+        '${nudge.memberName} still owes $amtStr from the ${nudge.groupName}.';
+    final bodyMsg = nudge.daysSilent > 0
+        ? "It's been quiet for ${nudge.daysSilent} days. We can send ${nudge.memberName.split(' ').first} a soft reminder — phrased gently, no chase energy."
+        : "No settlements yet. We can send a soft reminder — phrased gently, no chase energy.";
+
+    if (dark) {
+      return Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF2C1A0E), Color(0xFF1A1208)],
+          ),
+          borderRadius: PayPactRadius.lg,
+        ),
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: amber.withValues(alpha: 0.22),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.bolt_rounded, size: 14, color: amber),
+                ),
+                const SizedBox(width: 8),
+                Text('SMART NUDGE',
+                    style: PayPactTypography.label.copyWith(
+                        color: amber, letterSpacing: 1.6, fontSize: 10)),
+                const SizedBox(width: 6),
+                Text('/',
+                    style: PayPactTypography.bodySm
+                        .copyWith(color: Colors.white24)),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    nudge.daysSilent > 0
+                        ? 'For you · ${nudge.daysSilent}d ago'
+                        : 'For you · just now',
+                    style: PayPactTypography.bodySm
+                        .copyWith(color: Colors.white38, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(shortMsg,
+                style: PayPactTypography.headingMd.copyWith(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25)),
+            const SizedBox(height: 10),
+            Text(bodyMsg,
+                style: PayPactTypography.bodySm
+                    .copyWith(color: Colors.white54, height: 1.5)),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                FilledButton(
+                  onPressed: onNudge,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: amber,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    shape:
+                        RoundedRectangleBorder(borderRadius: PayPactRadius.md),
+                    textStyle: PayPactTypography.bodySm
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  child: const Text('Send soft nudge'),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton(
+                  onPressed: onLater,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                    minimumSize: const Size(0, 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    shape:
+                        RoundedRectangleBorder(borderRadius: PayPactRadius.md),
+                    textStyle: PayPactTypography.bodySm
+                        .copyWith(fontWeight: FontWeight.w500),
+                  ),
+                  child: const Text('Later'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Light / mobile variant ────────────────────────────────────────────
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+    final bgColor =
+        isDarkTheme ? const Color(0xFF2A1F0E) : const Color(0xFFFFF5EA);
+    final borderColor =
+        isDarkTheme ? const Color(0xFF4A3010) : const Color(0xFFFFD9A0);
 
     return Container(
       decoration: BoxDecoration(
@@ -918,52 +1183,43 @@ class _SmartNudgeCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child:
-                    const Icon(Icons.bolt_rounded, size: 16, color: amber),
+                child: const Icon(Icons.bolt_rounded, size: 16, color: amber),
               ),
               const SizedBox(width: 8),
-              Text(
-                'SMART NUDGE',
-                style: PayPactTypography.label
-                    .copyWith(color: amber, letterSpacing: 1.6),
-              ),
+              Text('SMART NUDGE',
+                  style: PayPactTypography.label
+                      .copyWith(color: amber, letterSpacing: 1.6)),
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            message,
-            style: PayPactTypography.bodyMd.copyWith(color: pt.ink),
-          ),
+          Text('$shortMsg $bodyMsg',
+              style: PayPactTypography.bodyMd.copyWith(color: pt.ink)),
           const SizedBox(height: 14),
           Row(
             children: [
               GestureDetector(
                 onTap: onNudge,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     border: Border.all(color: pt.ink),
                     borderRadius: PayPactRadius.md,
                   ),
-                  child: Text(
-                    'Send a soft nudge',
-                    style: PayPactTypography.bodySm.copyWith(
-                        color: pt.ink, fontWeight: FontWeight.w600),
-                  ),
+                  child: Text('Send a soft nudge',
+                      style: PayPactTypography.bodySm.copyWith(
+                          color: pt.ink, fontWeight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(width: 10),
               GestureDetector(
                 onTap: onLater,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 8),
-                  child: Text(
-                    'Later',
-                    style: PayPactTypography.bodySm.copyWith(
-                        color: pt.ink2, fontWeight: FontWeight.w500),
-                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Text('Later',
+                      style: PayPactTypography.bodySm.copyWith(
+                          color: pt.ink2, fontWeight: FontWeight.w500)),
                 ),
               ),
             ],
@@ -1001,8 +1257,7 @@ class _RecentRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            border: Border(
-                bottom: BorderSide(color: pt.border, width: 0.5)),
+            border: Border(bottom: BorderSide(color: pt.border, width: 0.5)),
           ),
           child: Row(
             children: [
@@ -1033,8 +1288,7 @@ class _RecentRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '${item.groupName} · $relativeTime',
-                      style: PayPactTypography.bodySm
-                          .copyWith(color: pt.ink3),
+                      style: PayPactTypography.bodySm.copyWith(color: pt.ink3),
                     ),
                   ],
                 ),
@@ -1049,7 +1303,9 @@ class _RecentRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    item.isPaidByCurrentUser ? 'You paid' : '${item.paidByName} paid',
+                    item.isPaidByCurrentUser
+                        ? 'You paid'
+                        : '${item.paidByName} paid',
                     style: PayPactTypography.micro.copyWith(color: pt.ink3),
                   ),
                 ],
@@ -1089,8 +1345,7 @@ class _GroupTile extends StatelessWidget {
           Container(
             width: 36,
             height: 36,
-            decoration:
-                BoxDecoration(color: tones[0], shape: BoxShape.circle),
+            decoration: BoxDecoration(color: tones[0], shape: BoxShape.circle),
             alignment: Alignment.center,
             child: Text(group.emoji, style: const TextStyle(fontSize: 18)),
           ),
@@ -1117,27 +1372,125 @@ class _GroupTile extends StatelessWidget {
   }
 }
 
+// ── Web group tile ────────────────────────────────────────────────────────────
+
+class _WebGroupTile extends StatelessWidget {
+  const _WebGroupTile({
+    required this.group,
+    this.lastExpense,
+    this.relativeTime,
+  });
+
+  final GroupEntity group;
+  final RecentExpenseItem? lastExpense;
+  final String? relativeTime;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    final cat = _categoryFromString(group.category);
+    final tones = PpCategoryDisc.tone(context, cat);
+    final isPositive = group.netBalance >= 0;
+    final amtColor = group.netBalance == 0
+        ? pt.ink3
+        : isPositive
+            ? pt.positive
+            : pt.negative;
+
+    final metaParts = <String>[
+      '${group.memberIds.length} members',
+      if (relativeTime != null) relativeTime!,
+      if (lastExpense != null) lastExpense!.title,
+    ];
+
+    return Container(
+      width: 168,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: pt.surface,
+        border: Border.all(color: pt.border),
+        borderRadius: PayPactRadius.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: tones[0], shape: BoxShape.circle),
+            alignment: Alignment.center,
+            child: Text(group.emoji, style: const TextStyle(fontSize: 20)),
+          ),
+          const SizedBox(height: 12),
+          Text(group.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: PayPactTypography.bodyMd
+                  .copyWith(color: pt.ink, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 3),
+          Text(
+            metaParts.join(' · '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: PayPactTypography.bodySm.copyWith(color: pt.ink3),
+          ),
+          const Spacer(),
+          Text(
+            group.netBalance == 0
+                ? 'SETTLED'
+                : isPositive
+                    ? 'YOU GET'
+                    : 'YOU OWE',
+            style: PayPactTypography.label
+                .copyWith(color: pt.ink3, letterSpacing: 1.4, fontSize: 9),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            PpAmount.format(group.netBalance.abs().round()),
+            style: PayPactTypography.amountLg
+                .copyWith(fontSize: 20, color: amtColor),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Add group tile ────────────────────────────────────────────────────────────
+
 class _AddGroupTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
     return Container(
-      width: 80,
+      width: 120,
       decoration: BoxDecoration(
-        color: pt.surfaceAlt,
+        color: Colors.transparent,
         borderRadius: PayPactRadius.lg,
-        border:
-            Border.all(color: pt.borderStrong, style: BorderStyle.solid),
+        border: Border.all(
+          color: pt.border,
+          style: BorderStyle.solid,
+          strokeAlign: BorderSide.strokeAlignInside,
+        ),
       ),
       alignment: Alignment.center,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.add_rounded, color: pt.ink2, size: 18),
-          const SizedBox(height: 4),
-          Text('New',
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: pt.surfaceAlt,
+              shape: BoxShape.circle,
+              border: Border.all(color: pt.border),
+            ),
+            child: Icon(Icons.add_rounded, color: pt.ink2, size: 18),
+          ),
+          const SizedBox(height: 8),
+          Text('New group',
               style: PayPactTypography.bodySm
-                  .copyWith(color: pt.ink2, fontWeight: FontWeight.w600)),
+                  .copyWith(color: pt.ink2, fontWeight: FontWeight.w500)),
         ],
       ),
     );

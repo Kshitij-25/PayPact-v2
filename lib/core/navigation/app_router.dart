@@ -278,6 +278,8 @@ final appRouter = GoRouter(
                 final groupId = state.pathParameters['groupId']!;
                 return CustomTransitionPage(
                   key: state.pageKey,
+                  opaque: false,
+                  barrierColor: Colors.black54,
                   transitionDuration: const Duration(milliseconds: 350),
                   reverseTransitionDuration:
                       const Duration(milliseconds: 250),
@@ -296,6 +298,7 @@ final appRouter = GoRouter(
                   ),
                   child: SettleSuccessScreen(
                     groupId: groupId,
+                    groupName: extra?['groupName'] as String? ?? '',
                     fromUserName:
                         extra?['fromUserName'] as String? ?? 'You',
                     toUserName: extra?['toUserName'] as String? ?? '',

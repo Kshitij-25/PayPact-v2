@@ -6,11 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/app_router.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/adaptive_nav_scaffold.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
+import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/spacing.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
@@ -219,7 +221,9 @@ class _GroupDetailBody extends StatelessWidget {
           ][i](),
           onFabTap: () =>
               context.push('/group/$groupId/expense/add'),
-          body: Stack(
+          body: context.isDesktop
+              ? _WebGroupDetailBody(loaded: loaded, groupId: groupId)
+              : Stack(
             children: [
               Positioned(
                 top: 0,
@@ -923,6 +927,779 @@ class _DebtRow extends StatelessWidget {
           ),
         ],
       ]),
+    );
+  }
+}
+
+/// Naive count of distinct (debtor → creditor) relationships before
+/// simplification — derived from raw expense splits.
+int _naivePairwiseCount(List<ExpenseEntity> expenses) {
+  final Map<String, double> pair = {};
+  for (final e in expenses) {
+    for (final s in e.splits) {
+      if (s.userId != e.paidById && s.amount > 0.01) {
+        final key = '${s.userId}>${e.paidById}';
+        pair[key] = (pair[key] ?? 0) + s.amount;
+      }
+    }
+  }
+  final seen = <String>{};
+  var count = 0;
+  for (final key in pair.keys) {
+    if (seen.contains(key)) continue;
+    final parts = key.split('>');
+    final rev = '${parts[1]}>${parts[0]}';
+    final net = ((pair[key] ?? 0) - (pair[rev] ?? 0)).abs();
+    seen..add(key)..add(rev);
+    if (net > 0.01) count++;
+  }
+  return count;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Web group detail (desktop only)
+// ─────────────────────────────────────────────────────────────────────
+
+class _WebGroupDetailBody extends StatefulWidget {
+  const _WebGroupDetailBody({required this.loaded, required this.groupId});
+  final GroupDetailLoaded loaded;
+  final String groupId;
+
+  @override
+  State<_WebGroupDetailBody> createState() => _WebGroupDetailBodyState();
+}
+
+class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
+  String? _filterCategory; // null = all
+  bool _sortDesc = true;
+  String _activeTab = 'expenses';
+
+  GroupDetailLoaded get loaded => widget.loaded;
+  dynamic get group => widget.loaded.group;
+  String get groupId => widget.groupId;
+
+  String get _uid {
+    final s = context.read<AuthCubit>().state;
+    return s is AuthAuthenticated ? s.user.id : '';
+  }
+
+  String get _uname {
+    final s = context.read<AuthCubit>().state;
+    return s is AuthAuthenticated ? s.user.name : 'You';
+  }
+
+  String _dateRange(List<ExpenseEntity> ex) {
+    if (ex.isEmpty) return '';
+    var lo = ex.first.createdAt, hi = ex.first.createdAt;
+    for (final e in ex) {
+      if (e.createdAt.isBefore(lo)) lo = e.createdAt;
+      if (e.createdAt.isAfter(hi)) hi = e.createdAt;
+    }
+    final f = DateFormat('MMM d');
+    return lo == hi ? f.format(lo) : '${f.format(lo)} — ${f.format(hi)}';
+  }
+
+  Map<String, DateTime> _lastActivity() {
+    final m = <String, DateTime>{};
+    for (final e in loaded.expenses) {
+      void touch(String id) {
+        final p = m[id];
+        if (p == null || e.createdAt.isAfter(p)) m[id] = e.createdAt;
+      }
+
+      touch(e.paidById);
+      for (final s in e.splits) {
+        touch(s.userId);
+      }
+    }
+    return m;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    final tones = PpCategoryDisc.tone(context, _catFromString(group.category));
+    final sym = currencyOf(group.currency).symbol;
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _coverHeader(context, pt, tones, sym),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(40, 0, 40, 48),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _tabBar(context, pt),
+                const SizedBox(height: 24),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _leftColumn(context, pt, sym)),
+                    const SizedBox(width: 28),
+                    SizedBox(
+                        width: 340,
+                        child: _rightColumn(context, pt, sym)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _coverHeader(BuildContext context, PayPactThemeExtension pt,
+      List<Color> tones, String sym) {
+    final ex = loaded.expenses;
+    final total = ex.fold<double>(0, (s, e) => s + e.amount);
+    final range = _dateRange(ex);
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [tones[0], pt.bg],
+        ),
+      ),
+      child: ClipRect(
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned(
+              top: -56,
+              right: 24,
+              child: Opacity(
+                opacity: 0.45,
+                child: Text(group.emoji,
+                    style: const TextStyle(fontSize: 170)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(40, 22, 40, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    GestureDetector(
+                      onTap: () => context.go(AppRoutes.groups),
+                      child: Text('Groups',
+                          style: PayPactTypography.bodySm
+                              .copyWith(color: pt.ink3)),
+                    ),
+                    Padding(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 7),
+                      child: Icon(Icons.chevron_right_rounded,
+                          size: 15, color: pt.ink3),
+                    ),
+                    Text(group.name,
+                        style: PayPactTypography.bodySm.copyWith(
+                            color: pt.ink2, fontWeight: FontWeight.w600)),
+                  ]),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                PpChip(
+                                    label:
+                                        '${group.emoji} ${_capitalize(group.category)}',
+                                    tone: PpChipTone.ghost),
+                                if (range.isNotEmpty)
+                                  PpChip(
+                                      label: range,
+                                      tone: PpChipTone.ghost),
+                                PpChip(
+                                    label: group.currency,
+                                    tone: PpChipTone.ghost),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Text(group.name,
+                                style: PayPactTypography.displayLg.copyWith(
+                                    color: pt.ink,
+                                    fontSize: 42,
+                                    height: 1.05)),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${group.memberIds.length} members · ${ex.length} expenses · $sym${total.toStringAsFixed(0)} tracked',
+                              style: PayPactTypography.bodyLg
+                                  .copyWith(color: pt.ink2),
+                            ),
+                            const SizedBox(height: 16),
+                            PpAvatarStack(
+                              names: group.memberNames.values
+                                  .toList()
+                                  .cast<String>(),
+                              size: 30,
+                              max: 5,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      Row(
+                        children: [
+                          PayPactButton(
+                            onPressed: () =>
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content:
+                                            Text('Share — coming soon'))),
+                            label: 'Share',
+                            variant: PayPactButtonVariant.secondary,
+                            leftIcon: Icons.ios_share_rounded,
+                          ),
+                          const SizedBox(width: 10),
+                          PayPactButton(
+                            onPressed: () => context
+                                .push('/group/$groupId/settings'),
+                            label: 'Settings',
+                            variant: PayPactButtonVariant.secondary,
+                            leftIcon: Icons.settings_outlined,
+                          ),
+                          const SizedBox(width: 10),
+                          PayPactButton(
+                            onPressed: () => context
+                                .push('/group/$groupId/expense/add'),
+                            label: 'Add expense',
+                            variant: PayPactButtonVariant.accent,
+                            leftIcon: Icons.add_rounded,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tabBar(BuildContext context, PayPactThemeExtension pt) {
+    final tabs = <List<String>>[
+      ['expenses', 'Expenses · ${loaded.expenses.length}'],
+      ['balances', 'Balances'],
+      ['activity', 'Activity'],
+      ['settle', 'Settle map'],
+      ['members', 'Members'],
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: pt.border)),
+      ),
+      child: Row(
+        children: [
+          for (final t in tabs)
+            Padding(
+              padding: const EdgeInsets.only(right: 28),
+              child: _WebTab(
+                label: t[1],
+                active: _activeTab == t[0],
+                onTap: () => setState(() => _activeTab = t[0]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _leftColumn(
+      BuildContext context, PayPactThemeExtension pt, String sym) {
+    switch (_activeTab) {
+      case 'expenses':
+        return _expensesView(context, pt, sym);
+      case 'settle':
+        return _settlePlanView(context, pt, sym);
+      default:
+        return _placeholder(context, pt);
+    }
+  }
+
+  Widget _expensesView(
+      BuildContext context, PayPactThemeExtension pt, String sym) {
+    final all = loaded.expenses;
+    final cats = <String>[];
+    for (final e in all) {
+      if (!cats.contains(e.category)) cats.add(e.category);
+    }
+    var list = _filterCategory == null
+        ? [...all]
+        : all.where((e) => e.category == _filterCategory).toList();
+    list.sort((a, b) => _sortDesc
+        ? b.createdAt.compareTo(a.createdAt)
+        : a.createdAt.compareTo(b.createdAt));
+
+    final groups = <String, List<ExpenseEntity>>{};
+    for (final e in list) {
+      groups.putIfAbsent(_formatDate(e.createdAt), () => []).add(e);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _filterChip(pt, 'All categories', _filterCategory == null,
+                      () => setState(() => _filterCategory = null)),
+                  for (final c in cats)
+                    _filterChip(pt, _capitalize(c), _filterCategory == c,
+                        () => setState(() => _filterCategory = c)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () => setState(() => _sortDesc = !_sortDesc),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Sort: Date',
+                      style: PayPactTypography.bodySm
+                          .copyWith(color: pt.ink3)),
+                  const SizedBox(width: 3),
+                  Icon(
+                      _sortDesc
+                          ? Icons.arrow_downward_rounded
+                          : Icons.arrow_upward_rounded,
+                      size: 14,
+                      color: pt.ink3),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (list.isEmpty)
+          _placeholderInline(pt, Icons.receipt_long_outlined,
+              'No expenses in this filter')
+        else
+          for (final entry in groups.entries) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 20, 0, 2),
+              child: Row(
+                children: [
+                  Text(entry.key,
+                      style: PayPactTypography.label.copyWith(
+                          color: pt.ink3, letterSpacing: 1.4, fontSize: 10)),
+                  const Spacer(),
+                  Text(
+                      '${entry.value.length} EXPENSE${entry.value.length == 1 ? '' : 'S'}',
+                      style: PayPactTypography.label.copyWith(
+                          color: pt.ink3, letterSpacing: 1.4, fontSize: 10)),
+                ],
+              ),
+            ),
+            for (var i = 0; i < entry.value.length; i++) ...[
+              if (i > 0) Divider(height: 1, color: pt.border),
+              _WebExpenseRow(
+                expense: entry.value[i],
+                uid: _uid,
+                sym: sym,
+                onTap: () => context.push('/expense/${entry.value[i].id}',
+                    extra: {'groupId': groupId}),
+              ),
+            ],
+          ],
+      ],
+    );
+  }
+
+  Widget _settlePlanView(
+      BuildContext context, PayPactThemeExtension pt, String sym) {
+    final debts = _simplifyDebts(
+      loaded.globalMemberBalances,
+      Map<String, String>.from(group.memberNames),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Settle map',
+            style: PayPactTypography.headingLg.copyWith(color: pt.ink)),
+        const SizedBox(height: 4),
+        Text('The fewest payments to square everyone up.',
+            style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
+        const SizedBox(height: 16),
+        if (debts.isEmpty)
+          _placeholderInline(
+              pt, Icons.check_circle_outline_rounded, 'Everyone is settled up')
+        else
+          PayPactCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (var i = 0; i < debts.length; i++) ...[
+                  if (i > 0)
+                    Divider(
+                        color: pt.border,
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16),
+                  _DebtRow(
+                    debt: debts[i],
+                    currency: group.currency,
+                    groupId: groupId,
+                    groupName: group.name,
+                    currentUserId: _uid,
+                    currentUserName: _uname,
+                    fmt: (v) => '$sym${v.toStringAsFixed(
+                        v.truncateToDouble() == v ? 0 : 2)}',
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _placeholder(BuildContext context, PayPactThemeExtension pt) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 80),
+      alignment: Alignment.center,
+      child: Column(
+        children: [
+          Icon(Icons.construction_rounded, size: 36, color: pt.ink3),
+          const SizedBox(height: 10),
+          Text('This view is coming soon',
+              style: PayPactTypography.bodyMd.copyWith(color: pt.ink3)),
+        ],
+      ),
+    );
+  }
+
+  Widget _placeholderInline(
+      PayPactThemeExtension pt, IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 48),
+      alignment: Alignment.center,
+      child: Column(
+        children: [
+          Icon(icon, size: 32, color: pt.ink3),
+          const SizedBox(height: 8),
+          Text(label,
+              style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterChip(PayPactThemeExtension pt, String label, bool active,
+      VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? pt.accentSoft : pt.surface,
+          borderRadius: PayPactRadius.full,
+          border: Border.all(color: active ? pt.accent : pt.border),
+        ),
+        child: Text(label,
+            style: PayPactTypography.bodySm.copyWith(
+                color: active ? pt.accentInk : pt.ink2,
+                fontWeight: FontWeight.w600,
+                fontSize: 12)),
+      ),
+    );
+  }
+
+  Widget _rightColumn(
+      BuildContext context, PayPactThemeExtension pt, String sym) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _balanceCard(context, pt, sym),
+        const SizedBox(height: 16),
+        _whoOwesCard(context, pt, sym),
+        const SizedBox(height: 16),
+        _autoSimplifiedCard(context, pt, sym),
+      ],
+    );
+  }
+
+  Widget _balanceCard(
+      BuildContext context, PayPactThemeExtension pt, String sym) {
+    final net = loaded.netBalance;
+    final oweYou =
+        loaded.memberBalances.values.where((v) => v > 0.01).length;
+    final youOwe =
+        loaded.memberBalances.values.where((v) => v < -0.01).length;
+    final hasBalance =
+        loaded.memberBalances.values.any((v) => v.abs() > 0.01);
+    return PayPactCard(
+      raised: true,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('YOUR BALANCE HERE',
+              style: PayPactTypography.label
+                  .copyWith(color: pt.ink3, letterSpacing: 1.6, fontSize: 10)),
+          const SizedBox(height: 10),
+          Text(
+            '${net >= 0 ? '+' : '−'}$sym${net.abs().toStringAsFixed(0)}',
+            style: PayPactTypography.amountHero.copyWith(
+                color: net >= 0 ? pt.positive : pt.negative, fontSize: 38),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$oweYou ${oweYou == 1 ? 'person owes' : 'people owe'} you · $youOwe you owe',
+            style: PayPactTypography.bodySm.copyWith(color: pt.ink3),
+          ),
+          const SizedBox(height: 16),
+          PayPactButton(
+            onPressed:
+                hasBalance ? () => setState(() => _activeTab = 'settle') : null,
+            label: hasBalance ? 'Settle up' : "You're settled up",
+            variant: PayPactButtonVariant.accent,
+            isFullWidth: true,
+            leftIcon: Icons.handshake_rounded,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _whoOwesCard(
+      BuildContext context, PayPactThemeExtension pt, String sym) {
+    final entries = loaded.memberBalances.entries
+        .where((e) => e.value.abs() > 0.01)
+        .toList()
+      ..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
+    final last = _lastActivity();
+    final now = DateTime.now();
+
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return PayPactCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text('WHO OWES WHO',
+                style: PayPactTypography.label.copyWith(
+                    color: pt.ink3, letterSpacing: 1.6, fontSize: 10)),
+          ),
+          for (var i = 0; i < entries.length; i++) ...[
+            if (i > 0)
+              Divider(
+                  color: pt.border, height: 1, indent: 16, endIndent: 16),
+            Builder(builder: (_) {
+              final id = entries[i].key;
+              final v = entries[i].value;
+              final name =
+                  (group.memberNames[id] as String?) ?? 'Member';
+              final la = last[id];
+              final quietDays =
+                  la != null ? now.difference(la).inDays : 0;
+              return Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                child: Row(children: [
+                  PpAvatar(name: name, size: 34),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name,
+                            style: PayPactTypography.bodyMd.copyWith(
+                                color: pt.ink,
+                                fontWeight: FontWeight.w600)),
+                        if (quietDays >= 7)
+                          Text('quiet for $quietDays days',
+                              style: PayPactTypography.micro
+                                  .copyWith(color: pt.warn)),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${v >= 0 ? '+' : '−'}$sym${v.abs().toStringAsFixed(0)}',
+                    style: PayPactTypography.amountMd.copyWith(
+                        color: v >= 0 ? pt.positive : pt.negative,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14),
+                  ),
+                ]),
+              );
+            }),
+          ],
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _autoSimplifiedCard(
+      BuildContext context, PayPactThemeExtension pt, String sym) {
+    final debts = _simplifyDebts(
+      loaded.globalMemberBalances,
+      Map<String, String>.from(group.memberNames),
+    );
+    if (debts.isEmpty) return const SizedBox.shrink();
+    final naive = _naivePairwiseCount(loaded.expenses);
+    final body = naive > debts.length
+        ? '${debts.length} payment${debts.length == 1 ? '' : 's'} instead of $naive will square the group.'
+        : 'Settle the group in ${debts.length} payment${debts.length == 1 ? '' : 's'}.';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: pt.accentSoft,
+        borderRadius: PayPactRadius.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.bolt_rounded, size: 14, color: pt.accentInk),
+            const SizedBox(width: 6),
+            Text('AUTO-SIMPLIFIED',
+                style: PayPactTypography.label.copyWith(
+                    color: pt.accentInk,
+                    letterSpacing: 1.4,
+                    fontSize: 10)),
+          ]),
+          const SizedBox(height: 8),
+          Text(body,
+              style: PayPactTypography.bodySm
+                  .copyWith(color: pt.ink2, height: 1.45)),
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: () => setState(() => _activeTab = 'settle'),
+            child: Text('Show plan →',
+                style: PayPactTypography.bodySm.copyWith(
+                    color: pt.accentInk, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WebTab extends StatelessWidget {
+  const _WebTab(
+      {required this.label, required this.active, required this.onTap});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.only(bottom: 12, top: 2),
+        decoration: BoxDecoration(
+          border: active
+              ? Border(bottom: BorderSide(color: pt.accent, width: 2))
+              : null,
+        ),
+        child: Text(label,
+            style: PayPactTypography.bodyMd.copyWith(
+              color: active ? pt.accent : pt.ink3,
+              fontWeight: FontWeight.w600,
+            )),
+      ),
+    );
+  }
+}
+
+class _WebExpenseRow extends StatelessWidget {
+  const _WebExpenseRow({
+    required this.expense,
+    required this.uid,
+    required this.sym,
+    required this.onTap,
+  });
+  final ExpenseEntity expense;
+  final String uid;
+  final String sym;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    final cat = _catFromString(expense.category);
+    final paidByMe = expense.paidById == uid;
+    final myShare = expense.splitAmountFor(uid);
+    final shareAmt = paidByMe ? expense.amount - myShare : -myShare;
+    final payer = paidByMe ? 'You' : expense.paidByName.split(' ').first;
+    final time = DateFormat('h:mm a').format(expense.createdAt);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: PayPactRadius.md,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            PpCategoryDisc(
+                category: cat, icon: _iconForCategory(cat), size: 40),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(expense.title,
+                      style: PayPactTypography.bodyMd.copyWith(
+                          color: pt.ink, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$payer paid · split ${expense.splits.length} ways',
+                    style:
+                        PayPactTypography.bodySm.copyWith(color: pt.ink3),
+                  ),
+                ],
+              ),
+            ),
+            Text(time,
+                style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
+            const SizedBox(width: 20),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('$sym${expense.amount.toStringAsFixed(0)}',
+                    style: PayPactTypography.amountLg
+                        .copyWith(color: pt.ink, fontSize: 16)),
+                const SizedBox(height: 2),
+                Text(
+                  '${paidByMe ? '+' : '−'}$sym${shareAmt.abs().toStringAsFixed(0)}',
+                  style: PayPactTypography.bodySm.copyWith(
+                    color: paidByMe ? pt.positive : pt.negative,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

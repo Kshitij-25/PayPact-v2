@@ -1,7 +1,10 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/navigation/app_router.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -16,21 +19,25 @@ class SettleSuccessScreen extends StatelessWidget {
     required this.toUserName,
     required this.amount,
     required this.receiptId,
+    this.groupName = '',
     this.currency = '₹',
   });
 
   final String groupId;
+  final String groupName;
   final String fromUserName;
   final String toUserName;
   final double amount;
   final String receiptId;
   final String currency;
 
+  String get _sym => currencyOf(currency).symbol;
+
   String get _amountStr {
     final formatted = amount.truncateToDouble() == amount
         ? amount.toStringAsFixed(0)
         : amount.toStringAsFixed(2);
-    return '$currency$formatted';
+    return '$_sym$formatted';
   }
 
   String get _dateStr =>
@@ -41,6 +48,10 @@ class SettleSuccessScreen extends StatelessWidget {
     final pt = context.pt;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final firstName = toUserName.split(' ').first;
+
+    if (context.isDesktop) {
+      return _buildWebModal(context, pt, isDark, firstName);
+    }
 
     return Scaffold(
       backgroundColor: pt.bg,
@@ -166,6 +177,205 @@ class SettleSuccessScreen extends StatelessWidget {
                     isFullWidth: true,
                   ),
                 ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────
+  // Web modal (desktop only)
+  // ───────────────────────────────────────────────────────────────────
+
+  String _handle(String name) =>
+      '@${name.split(' ').first.toLowerCase()}';
+
+  Widget _buildWebModal(BuildContext context, PayPactThemeExtension pt,
+      bool isDark, String firstName) {
+    final timeStr = DateFormat('h:mm a').format(DateTime.now());
+    final totalStr = '$_sym${NumberFormat('#,##0.00').format(amount)}';
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              child: Container(color: Colors.black.withValues(alpha: 0.18)),
+            ),
+          ),
+          Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 440,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [pt.positiveSoft, pt.bg],
+                    stops: const [0, 0.42],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.22),
+                      blurRadius: 80,
+                      offset: const Offset(0, 24),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(28, 36, 28, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(child: _CheckRing(isDark: isDark)),
+                        const SizedBox(height: 28),
+                        Center(
+                          child: Text('SETTLED · $timeStr',
+                              style: PayPactTypography.label.copyWith(
+                                  color: pt.positive, letterSpacing: 1.6)),
+                        ),
+                        const SizedBox(height: 12),
+                        Center(
+                          child: Text('You and $firstName\nare square.',
+                              textAlign: TextAlign.center,
+                              style: PayPactTypography.displayLg
+                                  .copyWith(color: pt.ink, fontSize: 30)),
+                        ),
+                        const SizedBox(height: 12),
+                        Center(
+                          child: SizedBox(
+                            width: 320,
+                            child: Text(
+                              '$_amountStr recorded as cash. $firstName will get a calm notification — no follow-up needed.',
+                              textAlign: TextAlign.center,
+                              style: PayPactTypography.bodyMd
+                                  .copyWith(color: pt.ink2, height: 1.5),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: pt.surface,
+                            borderRadius: PayPactRadius.lg,
+                            border: Border.all(color: pt.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('RECEIPT',
+                                          style: PayPactTypography.label
+                                              .copyWith(
+                                                  color: pt.ink3,
+                                                  letterSpacing: 1.6,
+                                                  fontSize: 10)),
+                                      const SizedBox(height: 3),
+                                      Text(receiptId,
+                                          style: PayPactTypography.amountMd
+                                              .copyWith(color: pt.ink)),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                      color: pt.surfaceAlt,
+                                      borderRadius: PayPactRadius.sm,
+                                      border: Border.all(color: pt.border)),
+                                  alignment: Alignment.center,
+                                  child: Icon(Icons.qr_code_2_rounded,
+                                      color: pt.ink2, size: 20),
+                                ),
+                              ]),
+                              const SizedBox(height: 16),
+                              _RKv(
+                                  label: 'From',
+                                  value:
+                                      '$fromUserName · ${_handle(fromUserName)}'),
+                              const SizedBox(height: 9),
+                              _RKv(
+                                  label: 'To',
+                                  value:
+                                      '$toUserName · ${_handle(toUserName)}'),
+                              if (groupName.isNotEmpty) ...[
+                                const SizedBox(height: 9),
+                                _RKv(label: 'Group', value: groupName),
+                              ],
+                              const SizedBox(height: 9),
+                              _RKv(
+                                  label: 'Method',
+                                  value: 'Cash · marked paid'),
+                              const SizedBox(height: 14),
+                              const PpDashedDivider(),
+                              const SizedBox(height: 14),
+                              Row(children: [
+                                Expanded(
+                                  child: Text('Total settled',
+                                      style: PayPactTypography.bodyMd.copyWith(
+                                          color: pt.ink,
+                                          fontWeight: FontWeight.w700)),
+                                ),
+                                Text(totalStr,
+                                    style: PayPactTypography.amountLg
+                                        .copyWith(color: pt.ink)),
+                              ]),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: PayPactButton(
+                                onPressed: () =>
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                            content: Text(
+                                                'Share receipt — coming soon'))),
+                                label: 'Share receipt',
+                                variant: PayPactButtonVariant.secondary,
+                                size: PayPactButtonSize.large,
+                                leftIcon: Icons.ios_share_rounded,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: PayPactButton(
+                                onPressed: () => context.canPop()
+                                    ? context.pop()
+                                    : context.go(AppRoutes.home),
+                                label: 'Done',
+                                variant: PayPactButtonVariant.accent,
+                                size: PayPactButtonSize.large,
+                                isFullWidth: true,
+                                leftIcon: Icons.check_rounded,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

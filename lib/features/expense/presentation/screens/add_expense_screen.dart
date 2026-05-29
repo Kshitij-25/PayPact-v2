@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/core/utils/responsive.dart';
@@ -60,7 +61,8 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     _CatChoice('Food', '🍽', PpCategory.food, 'food'),
     _CatChoice('Stay', '🛏', PpCategory.stay, 'stay'),
     _CatChoice('Transport', '🚕', PpCategory.transport, 'transport'),
-    _CatChoice('Shopping', '🛍', PpCategory.shopping, 'shopping'),
+    _CatChoice('Shop', '🛍', PpCategory.shopping, 'shopping'),
+    _CatChoice('Fun', '🎬', PpCategory.entertainment, 'entertainment'),
     _CatChoice('Other', '✨', PpCategory.other, 'other'),
   ];
 
@@ -195,6 +197,35 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     }
   }
 
+  // Web preview banner text: "5 × ₹480.00. You'll owe Priya ₹480"
+  String _webSmartSplitText(String currentUserId) {
+    final amount = _parsedAmount;
+    if (amount <= 0) return '';
+    final splits = _buildUiSplits(amount);
+    if (splits.isEmpty) return '';
+
+    final cur = currencyOf(_selectedCurrency);
+    final n = splits.length;
+    final mySplit = splits.firstWhere(
+      (s) => s.userId == currentUserId,
+      orElse: () =>
+          ExpenseSplitEntity(userId: '', userName: '', amount: 0),
+    );
+
+    if (_splitType == 'equally') {
+      final each = amount / n;
+      final tail = _paidById == currentUserId
+          ? "You'll get back ${cur.symbol}${(amount - mySplit.amount).toStringAsFixed(0)}"
+          : "You'll owe $_paidByName ${cur.symbol}${mySplit.amount.toStringAsFixed(0)}";
+      return '$n × ${cur.symbol}${each.toStringAsFixed(2)}. $tail';
+    }
+
+    if (_paidById == currentUserId) {
+      return "You'll get back ${cur.symbol}${(amount - mySplit.amount).toStringAsFixed(0)}";
+    }
+    return "You'll owe $_paidByName ${cur.symbol}${mySplit.amount.toStringAsFixed(0)}";
+  }
+
   void _pickCurrency() {
     showModalBottomSheet(
       context: context,
@@ -272,6 +303,11 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
         final isForeign = _selectedCurrency != _groupCurrency;
         final smartText = _smartSplitText(currentUserId);
         final memberCount = _group?.memberNames.length ?? 0;
+
+        if (context.isDesktop) {
+          return _buildWebModal(context, state, currentUserId, parsedAmount,
+              selectedCur, memberCount, _webSmartSplitText(currentUserId), loading);
+        }
 
         final sheetContent = Container(
           decoration: BoxDecoration(
@@ -699,7 +735,608 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
           currentUserId: authState.user.id,
         );
   }
-}
+
+// ─────────────────────────────────────────────────────────────────────
+// Web modal (desktop only)
+// ─────────────────────────────────────────────────────────────────────
+
+  Widget _buildWebModal(
+    BuildContext context,
+    AddExpenseState state,
+    String currentUserId,
+    double parsedAmount,
+    AppCurrency selectedCur,
+    int memberCount,
+    String smartText,
+    bool loading,
+  ) {
+    final pt = context.pt;
+    final liveSplits =
+        parsedAmount > 0 ? _buildUiSplits(parsedAmount) : <ExpenseSplitEntity>[];
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    final dateLabel = _useYesterday
+        ? 'Yesterday · ${DateFormat('MMM d').format(yesterday)}'
+        : 'Today · ${DateFormat('MMM d').format(now)}';
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => context.pop(),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child: Container(
+                    color: Colors.black.withValues(alpha: 0.18)),
+              ),
+            ),
+          ),
+          Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 716,
+                constraints: BoxConstraints(
+                  maxHeight:
+                      MediaQuery.sizeOf(context).height * 0.9,
+                ),
+                decoration: BoxDecoration(
+                  color: pt.bg,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.22),
+                      blurRadius: 80,
+                      offset: const Offset(0, 24),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _webHeader(context, pt),
+                      Divider(height: 1, color: pt.border),
+                      SizedBox(
+                        height: 488,
+                        child: Row(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.fromLTRB(
+                                    24, 20, 24, 20),
+                                child: _webLeftPanel(context, pt,
+                                    parsedAmount, selectedCur,
+                                    memberCount, dateLabel),
+                              ),
+                            ),
+                            VerticalDivider(
+                                width: 1,
+                                thickness: 1,
+                                color: pt.border),
+                            SizedBox(
+                              width: 300,
+                              child: _webRightPanel(
+                                  context, pt, currentUserId,
+                                  parsedAmount, selectedCur,
+                                  liveSplits, smartText),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Divider(height: 1, color: pt.border),
+                      _webFooter(context, pt, loading),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _webHeader(
+      BuildContext context, PayPactThemeExtension pt) {
+    final now = DateTime.now();
+    final d = _useYesterday
+        ? now.subtract(const Duration(days: 1))
+        : now;
+    final subtitle = _group != null
+        ? '${_group!.name} · ${DateFormat('MMM d').format(d)} · saved as you type'
+        : 'saved as you type';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: pt.accentSoft,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.receipt_long_outlined,
+                size: 18, color: pt.accent),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('New expense',
+                  style: PayPactTypography.bodyMd.copyWith(
+                      color: pt.ink, fontWeight: FontWeight.w700)),
+              Text(subtitle,
+                  style: PayPactTypography.bodySm
+                      .copyWith(color: pt.ink3)),
+            ],
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => context.pop(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: pt.border),
+              ),
+              child: Text('ESC',
+                  style: PayPactTypography.label.copyWith(
+                      color: pt.ink3,
+                      fontSize: 11,
+                      letterSpacing: 0.5)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => context.pop(),
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: pt.surface,
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Icon(Icons.close_rounded,
+                  size: 16, color: pt.ink3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _webLeftPanel(
+    BuildContext context,
+    PayPactThemeExtension pt,
+    double parsedAmount,
+    AppCurrency selectedCur,
+    int memberCount,
+    String dateLabel,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Amount
+        Center(
+          child: Column(
+            children: [
+              Text('AMOUNT',
+                  style: PayPactTypography.label.copyWith(
+                      color: pt.ink3,
+                      letterSpacing: 1.6,
+                      fontSize: 10)),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _amountCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(
+                          decimal: true),
+                  textAlign: TextAlign.center,
+                  style: PayPactTypography.amountHero.copyWith(
+                      color: pt.accent, fontSize: 48),
+                  decoration: InputDecoration(
+                    hintText: '0',
+                    hintStyle:
+                        PayPactTypography.amountHero.copyWith(
+                            color:
+                                pt.ink3.withValues(alpha: 0.35),
+                            fontSize: 48),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    filled: false,
+                    prefixText: selectedCur.symbol,
+                    prefixStyle:
+                        PayPactTypography.amountHero.copyWith(
+                            color: pt.accent, fontSize: 28),
+                    isDense: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              if (parsedAmount > 0 && memberCount > 0) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _splitType == 'equally'
+                      ? '≈ ${selectedCur.symbol}${(parsedAmount / memberCount).toStringAsFixed(0)} each, equally'
+                      : _splitLabel(),
+                  style: PayPactTypography.bodySm
+                      .copyWith(color: pt.ink3),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        // Description
+        Text('DESCRIPTION',
+            style: PayPactTypography.label.copyWith(
+                color: pt.ink3,
+                letterSpacing: 1.4,
+                fontSize: 10)),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _titleCtrl,
+          style: PayPactTypography.bodyMd.copyWith(color: pt.ink),
+          decoration: InputDecoration(
+            hintText: 'Beach shack dinner',
+            hintStyle: PayPactTypography.bodyMd
+                .copyWith(color: pt.ink3),
+            prefixIcon: Icon(Icons.receipt_long_outlined,
+                size: 16, color: pt.ink2),
+            filled: true,
+            fillColor: pt.surface,
+            border: OutlineInputBorder(
+                borderRadius: PayPactRadius.md,
+                borderSide: BorderSide(color: pt.borderStrong)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: PayPactRadius.md,
+                borderSide: BorderSide(color: pt.borderStrong)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: PayPactRadius.md,
+                borderSide:
+                    BorderSide(color: pt.accent, width: 1.4)),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 12),
+          ),
+        ),
+        const SizedBox(height: 14),
+        // Category
+        Text('CATEGORY',
+            style: PayPactTypography.label.copyWith(
+                color: pt.ink3,
+                letterSpacing: 1.4,
+                fontSize: 10)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final cat in _cats)
+              GestureDetector(
+                onTap: () =>
+                    setState(() => _selectedCategory = cat.catId),
+                child: _CategoryChip(
+                    c: cat,
+                    selected: _selectedCategory == cat.catId),
+              ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        // Date + Group
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('DATE',
+                      style: PayPactTypography.label.copyWith(
+                          color: pt.ink3,
+                          letterSpacing: 1.4,
+                          fontSize: 10)),
+                  const SizedBox(height: 6),
+                  _WebSelector(
+                    pt: pt,
+                    leading: Icon(Icons.calendar_today_outlined,
+                        size: 14, color: pt.ink2),
+                    label: dateLabel,
+                    onTap: () => setState(
+                        () => _useYesterday = !_useYesterday),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('GROUP',
+                      style: PayPactTypography.label.copyWith(
+                          color: pt.ink3,
+                          letterSpacing: 1.4,
+                          fontSize: 10)),
+                  const SizedBox(height: 6),
+                  _WebSelector(
+                    pt: pt,
+                    leading: _group != null
+                        ? Text(_group!.emoji,
+                            style: const TextStyle(fontSize: 15))
+                        : Icon(Icons.group_outlined,
+                            size: 14, color: pt.ink2),
+                    label: _group?.name ?? 'Loading…',
+                    onTap: null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Paid by + Split
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('PAID BY',
+                      style: PayPactTypography.label.copyWith(
+                          color: pt.ink3,
+                          letterSpacing: 1.4,
+                          fontSize: 10)),
+                  const SizedBox(height: 6),
+                  _WebSelector(
+                    pt: pt,
+                    leading: _paidByName.isNotEmpty
+                        ? PpAvatar(name: _paidByName, size: 22)
+                        : Icon(Icons.person_outline,
+                            size: 14, color: pt.ink2),
+                    label: _paidByName.isEmpty
+                        ? 'Select'
+                        : _paidByName,
+                    onTap: _pickPaidBy,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SPLIT',
+                      style: PayPactTypography.label.copyWith(
+                          color: pt.ink3,
+                          letterSpacing: 1.4,
+                          fontSize: 10)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _WebSelector(
+                          pt: pt,
+                          leading: Icon(Icons.call_split_rounded,
+                              size: 14, color: pt.ink2),
+                          label:
+                              'Equally · ${_group?.memberNames.length ?? 0} people',
+                          onTap: null,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: _adjustSplit,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: pt.surface,
+                            borderRadius: PayPactRadius.full,
+                            border: Border.all(color: pt.border),
+                          ),
+                          child: Text('Adjust',
+                              style: PayPactTypography.bodySm
+                                  .copyWith(
+                                      color: pt.ink,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _webRightPanel(
+    BuildContext context,
+    PayPactThemeExtension pt,
+    String currentUserId,
+    double parsedAmount,
+    AppCurrency selectedCur,
+    List<ExpenseSplitEntity> liveSplits,
+    String smartText,
+  ) {
+    return Container(
+      color: pt.bg,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('SMART SPLIT PREVIEW',
+              style: PayPactTypography.label.copyWith(
+                  color: pt.ink3,
+                  letterSpacing: 1.6,
+                  fontSize: 10)),
+          const SizedBox(height: 12),
+          Expanded(
+            child: liveSplits.isEmpty
+                ? Center(
+                    child: Text('Enter an amount to preview',
+                        style: PayPactTypography.bodySm
+                            .copyWith(color: pt.ink3)),
+                  )
+                : ListView.separated(
+                    itemCount: liveSplits.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: 8),
+                    itemBuilder: (context, i) {
+                      final split = liveSplits[i];
+                      final isMe = split.userId == currentUserId;
+                      final isPayer = split.userId == _paidById;
+                      final displayName = isMe
+                          ? '${split.userName} (you)'
+                          : split.userName;
+                      final subtitle = isPayer
+                          ? 'paid · ${selectedCur.symbol}${parsedAmount.toStringAsFixed(0)}'
+                          : 'owes $_paidByName';
+                      return _WebSplitPreviewRow(
+                        pt: pt,
+                        name: displayName,
+                        rawName: split.userName,
+                        subtitle: subtitle,
+                        amount:
+                            '${selectedCur.symbol}${split.amount.toStringAsFixed(0)}',
+                        amountColor: isPayer ? pt.positive : pt.ink,
+                      );
+                    },
+                  ),
+          ),
+          if (liveSplits.isNotEmpty && smartText.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: pt.accentSoft,
+                borderRadius: PayPactRadius.md,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.bolt_rounded,
+                      color: pt.accent, size: 14),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Smart split: $smartText — added to your ${_group?.name ?? 'group'} balance.',
+                      style: PayPactTypography.bodySm.copyWith(
+                          color: pt.ink2, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _webFooter(
+      BuildContext context, PayPactThemeExtension pt, bool loading) {
+    return Padding(
+      padding:
+          const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      child: Row(
+        children: [
+          _WebFooterBtn(
+            pt: pt,
+            icon: Icons.photo_camera_outlined,
+            label: 'Scan receipt',
+            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('Scan receipt — coming soon'))),
+          ),
+          const SizedBox(width: 8),
+          _WebFooterBtn(
+            pt: pt,
+            icon: Icons.edit_outlined,
+            label: 'Add note',
+            onTap: () {},
+          ),
+          const Spacer(),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Press ',
+                  style: PayPactTypography.bodySm
+                      .copyWith(color: pt.ink3, fontSize: 12)),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  border: Border.all(color: pt.border),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('⌘↩',
+                    style: PayPactTypography.bodySm.copyWith(
+                        color: pt.ink3, fontSize: 11)),
+              ),
+            ],
+          ),
+          const SizedBox(width: 16),
+          GestureDetector(
+            onTap: () => context.pop(),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 9),
+              decoration: BoxDecoration(
+                borderRadius: PayPactRadius.full,
+                border: Border.all(color: pt.border),
+              ),
+              child: Text('Cancel',
+                  style: PayPactTypography.bodyMd.copyWith(
+                      color: pt.ink,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: loading ? null : _save,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 18, vertical: 9),
+              decoration: BoxDecoration(
+                color: loading ? pt.ink3 : pt.accent,
+                borderRadius: PayPactRadius.full,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.check_rounded,
+                      size: 14, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Text(loading ? 'Saving…' : 'Save expense',
+                      style: PayPactTypography.bodyMd.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+} // end _AddExpenseBodyState
 
 // ─────────────────────────────────────────────────────────────────────
 // Info row (Group / Paid by)
@@ -1335,6 +1972,164 @@ class _CategoryChip extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 fontSize: 13)),
       ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Web — pill-style field selector (Date / Group / Paid by / Split)
+// ─────────────────────────────────────────────────────────────────────
+
+class _WebSelector extends StatelessWidget {
+  const _WebSelector({
+    required this.pt,
+    required this.leading,
+    required this.label,
+    required this.onTap,
+  });
+  final PayPactThemeExtension pt;
+  final Widget leading;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: pt.surface,
+          borderRadius: PayPactRadius.md,
+          border: Border.all(color: pt.border),
+        ),
+        child: Row(
+          children: [
+            leading,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PayPactTypography.bodyMd.copyWith(
+                      color: pt.ink,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13)),
+            ),
+            Icon(Icons.expand_more_rounded,
+                size: 16, color: pt.ink3),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Web — smart split preview row
+// ─────────────────────────────────────────────────────────────────────
+
+class _WebSplitPreviewRow extends StatelessWidget {
+  const _WebSplitPreviewRow({
+    required this.pt,
+    required this.name,
+    required this.rawName,
+    required this.subtitle,
+    required this.amount,
+    required this.amountColor,
+  });
+  final PayPactThemeExtension pt;
+  final String name;
+  final String rawName;
+  final String subtitle;
+  final String amount;
+  final Color amountColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: pt.surface,
+        borderRadius: PayPactRadius.md,
+        border: Border.all(color: pt.border),
+      ),
+      child: Row(
+        children: [
+          PpAvatar(name: rawName, size: 30),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PayPactTypography.bodyMd.copyWith(
+                        color: pt.ink,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13)),
+                Text(subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PayPactTypography.bodySm
+                        .copyWith(color: pt.ink3, fontSize: 11)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(amount,
+              style: PayPactTypography.amountMd.copyWith(
+                  color: amountColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Web — footer ghost button (Scan receipt / Add note)
+// ─────────────────────────────────────────────────────────────────────
+
+class _WebFooterBtn extends StatelessWidget {
+  const _WebFooterBtn({
+    required this.pt,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+  final PayPactThemeExtension pt;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: PayPactRadius.full,
+          border: Border.all(color: pt.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: pt.ink2),
+            const SizedBox(width: 6),
+            Text(label,
+                style: PayPactTypography.bodySm.copyWith(
+                    color: pt.ink2,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 12)),
+          ],
+        ),
+      ),
     );
   }
 }

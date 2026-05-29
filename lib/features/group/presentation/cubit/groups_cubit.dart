@@ -36,8 +36,9 @@ class GroupsCubit extends Cubit<GroupsState> {
 
         double weeklyDelta = 0;
 
-        // Per-member tracking for smart nudge
-        final Map<String, double> memberBalance = {};
+        // Per-member tracking for smart nudge and open balances
+        final Map<String, double> memberBalance = {};   // others owe me
+        final Map<String, double> owedToMember = {};    // I owe others
         final Map<String, DateTime> memberLastActivity = {};
         final Map<String, String> memberNames = {};
         final Map<String, String> memberGroupNames = {};
@@ -88,6 +89,15 @@ class GroupsCubit extends Cubit<GroupsState> {
                   }
                 }
               }
+            } else {
+              // Track what I owe the payer
+              final myShare = e.splitAmountFor(_userId);
+              if (myShare > 0) {
+                owedToMember[e.paidById] =
+                    (owedToMember[e.paidById] ?? 0) + myShare;
+                memberNames[e.paidById] ??= e.paidByName;
+                memberGroupCurrency[e.paidById] ??= group.currency;
+              }
             }
           }
 
@@ -106,10 +116,14 @@ class GroupsCubit extends Cubit<GroupsState> {
               }
             }
 
-            // Reduce member balance
+            // Reduce balances on settlement
             if (toId == _userId && memberBalance.containsKey(fromId)) {
               memberBalance[fromId] =
                   math.max(0, (memberBalance[fromId]! - amount));
+            }
+            if (fromId == _userId && owedToMember.containsKey(toId)) {
+              owedToMember[toId] =
+                  math.max(0, (owedToMember[toId]! - amount));
             }
 
             // Update last activity for nudge
@@ -121,6 +135,28 @@ class GroupsCubit extends Cubit<GroupsState> {
             }
           }
         }
+
+        // Net per-member balance (positive = they owe me, negative = I owe them)
+        final Map<String, double> netPerMember = {...memberBalance};
+        owedToMember.forEach((uid, amt) {
+          netPerMember[uid] = (netPerMember[uid] ?? 0) - amt;
+        });
+        final memberBalances = netPerMember.entries
+            .where((e) => e.value.abs() >= 1)
+            .map((e) => MemberBalanceItem(
+                  userId: e.key,
+                  name: memberNames[e.key] ?? 'Member',
+                  netBalance: e.value,
+                  currency: memberGroupCurrency[e.key] ?? 'INR',
+                  groupName: memberGroupNames[e.key] ?? '',
+                  daysSilent: () {
+                    final last = memberLastActivity[e.key];
+                    return last != null ? now.difference(last).inDays : 0;
+                  }(),
+                ))
+            .toList()
+          ..sort((a, b) =>
+              b.netBalance.abs().compareTo(a.netBalance.abs()));
 
         // Recent expenses — most recent first, top 5
         allExpenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -151,11 +187,38 @@ class GroupsCubit extends Cubit<GroupsState> {
           }
         });
 
+        // Avg settle time — average hours between oldest group expense and each settlement
+        double avgSettleDays = 0;
+        int settleDataPoints = 0;
+        for (final (_, expenses, settlements) in results) {
+          if (expenses.isEmpty || settlements.isEmpty) continue;
+          dynamic firstExpense = expenses.first;
+          for (final e in expenses.skip(1)) {
+            if ((e as dynamic).createdAt.isBefore(
+                (firstExpense as dynamic).createdAt)) {
+              firstExpense = e;
+            }
+          }
+          for (final s in settlements) {
+            final settledAt = s['createdAt'] as DateTime?;
+            if (settledAt == null) continue;
+            final days =
+                settledAt.difference(firstExpense.createdAt).inMinutes / 1440.0;
+            if (days >= 0) {
+              avgSettleDays += days;
+              settleDataPoints++;
+            }
+          }
+        }
+        if (settleDataPoints > 0) avgSettleDays /= settleDataPoints;
+
         emit(GroupsLoaded(
           groups: groups,
           totalNetBalance: total,
           weeklyDelta: weeklyDelta,
           smartNudge: smartNudge,
+          memberBalances: memberBalances,
+          avgSettleDays: avgSettleDays,
           recentExpenses: recentExpenses,
         ));
       },

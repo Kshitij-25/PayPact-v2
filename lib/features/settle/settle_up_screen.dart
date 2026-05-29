@@ -1,7 +1,11 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
+import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
@@ -94,6 +98,21 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
         Icons.link_rounded),
   ];
 
+  static const _webMethods = [
+    _Method('Mark as paid in cash', 'No transfer · just record it',
+        Icons.payments_outlined),
+    _Method('PayPact wallet · QR', 'Instant · zero fees · best for friends',
+        Icons.qr_code_rounded),
+    _Method('External UPI', 'PhonePe, GPay, Paytm', Icons.smartphone_rounded),
+    _Method('Bank transfer', 'NEFT · IMPS · same day',
+        Icons.account_balance_outlined),
+  ];
+
+  String _money(double v) {
+    final sym = currencyOf(widget.currency).symbol;
+    return '$sym${NumberFormat('#,##0').format(v)}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -121,6 +140,7 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
           context.pushReplacement(
             '/group/${widget.groupId}/settle-success',
             extra: {
+              'groupName': widget.groupName,
               'fromUserName': state.fromUserName,
               'toUserName': state.toUserName,
               'amount': state.amount,
@@ -134,7 +154,14 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
           );
         }
       },
-      child: Scaffold(
+      child: context.isDesktop
+          ? _buildWebModal(
+              context,
+              currentUserIsPaying: currentUserIsPaying,
+              payerLabel: payerLabel,
+              receiverLabel: receiverLabel,
+            )
+          : Scaffold(
         backgroundColor: pt.bg,
         body: Stack(
           children: [
@@ -381,6 +408,293 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
       ),
     );
   }
+
+  // ───────────────────────────────────────────────────────────────────
+  // Web modal (desktop only)
+  // ───────────────────────────────────────────────────────────────────
+
+  Widget _buildWebModal(
+    BuildContext context, {
+    required bool currentUserIsPaying,
+    required String payerLabel,
+    required String receiverLabel,
+  }) {
+    final pt = context.pt;
+    final sugg = widget.suggestedAmount;
+    final firstName = widget.toUserName.split(' ').first;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => context.pop(),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child:
+                    Container(color: Colors.black.withValues(alpha: 0.18)),
+              ),
+            ),
+          ),
+          Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 600,
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+                ),
+                decoration: BoxDecoration(
+                  color: pt.bg,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.22),
+                      blurRadius: 80,
+                      offset: const Offset(0, 24),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                        child: Row(children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: pt.accentSoft,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.swap_horiz_rounded,
+                                size: 18, color: pt.accent),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Settle up',
+                                  style: PayPactTypography.bodyMd.copyWith(
+                                      color: pt.ink,
+                                      fontWeight: FontWeight.w700)),
+                              Text('Step 1 of 2 · Pick method',
+                                  style: PayPactTypography.bodySm
+                                      .copyWith(color: pt.ink3)),
+                            ],
+                          ),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () => context.pop(),
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: pt.surface,
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                              child: Icon(Icons.close_rounded,
+                                  size: 16, color: pt.ink3),
+                            ),
+                          ),
+                        ]),
+                      ),
+                      Divider(height: 1, color: pt.border),
+                      // Body
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(28, 20, 28, 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Center(
+                                child: Text('WHO PAID WHO',
+                                    style: PayPactTypography.label.copyWith(
+                                        color: pt.accent,
+                                        letterSpacing: 1.6,
+                                        fontSize: 10)),
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _party(pt, widget.fromUserName,
+                                        'FROM', payerLabel),
+                                  ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(_money(_amount),
+                                          style: PayPactTypography.amountHero
+                                              .copyWith(
+                                                  color: pt.accent,
+                                                  fontSize: 40)),
+                                      const SizedBox(height: 2),
+                                      Text('Clears all balances',
+                                          style: PayPactTypography.bodySm
+                                              .copyWith(color: pt.ink3)),
+                                    ],
+                                  ),
+                                  Expanded(
+                                    child: _party(pt, widget.toUserName, 'TO',
+                                        receiverLabel),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              Center(
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  alignment: WrapAlignment.center,
+                                  children: [
+                                    if (sugg > 0) ...[
+                                      _WebAmtChip(
+                                        top: _money(sugg / 2),
+                                        bottom: 'partial',
+                                        selected: _amount == sugg / 2,
+                                        onTap: () => setState(
+                                            () => _amount = sugg / 2),
+                                      ),
+                                      _WebAmtChip(
+                                        top: _money(sugg),
+                                        bottom: 'all open',
+                                        selected: _amount == sugg,
+                                        onTap: () =>
+                                            setState(() => _amount = sugg),
+                                      ),
+                                      _WebAmtChip(
+                                        top: _money(sugg * 2),
+                                        bottom: '+future',
+                                        selected: _amount == sugg * 2,
+                                        onTap: () => setState(
+                                            () => _amount = sugg * 2),
+                                      ),
+                                    ],
+                                    _WebAmtChip(
+                                      top: 'Custom',
+                                      bottom: 'enter amount',
+                                      selected: sugg <= 0 ||
+                                          (_amount != sugg / 2 &&
+                                              _amount != sugg &&
+                                              _amount != sugg * 2),
+                                      onTap: () =>
+                                          _showCustomAmountDialog(context),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              Text('METHOD',
+                                  style: PayPactTypography.label.copyWith(
+                                      color: pt.ink3,
+                                      letterSpacing: 1.4,
+                                      fontSize: 10)),
+                              const SizedBox(height: 8),
+                              PayPactCard(
+                                padding: EdgeInsets.zero,
+                                child: Column(children: [
+                                  for (var i = 0;
+                                      i < _webMethods.length;
+                                      i++) ...[
+                                    if (i > 0)
+                                      Divider(color: pt.border, height: 1),
+                                    _MethodTile(
+                                      m: _webMethods[i],
+                                      selected: _selectedMethod == i,
+                                      enabled: true,
+                                      onTap: i == 0
+                                          ? () => setState(
+                                              () => _selectedMethod = i)
+                                          : () => ScaffoldMessenger.of(context)
+                                              .showSnackBar(SnackBar(
+                                                  content: Text(
+                                                      '${_webMethods[i].label} — coming soon'))),
+                                    ),
+                                  ],
+                                ]),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Divider(height: 1, color: pt.border),
+                      // Footer
+                      Padding(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        child: Row(
+                          children: [
+                            PayPactButton(
+                              onPressed: () => context.pop(),
+                              label: 'Cancel',
+                              variant: PayPactButtonVariant.secondary,
+                              size: PayPactButtonSize.large,
+                            ),
+                            const Spacer(),
+                            BlocBuilder<SettleCubit, SettleState>(
+                              builder: (context, state) {
+                                final loading = state is SettleLoading;
+                                return PayPactButton(
+                                  onPressed: loading
+                                      ? null
+                                      : () =>
+                                          context.read<SettleCubit>().settle(
+                                                groupId: widget.groupId,
+                                                groupName: widget.groupName,
+                                                fromUserId: widget.fromUserId,
+                                                fromUserName:
+                                                    widget.fromUserName,
+                                                toUserId: widget.toUserId,
+                                                toUserName: widget.toUserName,
+                                                amount: _amount,
+                                              ),
+                                  label: loading
+                                      ? 'Recording…'
+                                      : 'Confirm — ${_money(_amount)} to $firstName',
+                                  variant: PayPactButtonVariant.accent,
+                                  size: PayPactButtonSize.large,
+                                  leftIcon:
+                                      loading ? null : Icons.check_rounded,
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _party(PayPactThemeExtension pt, String name, String role,
+      String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PpAvatar(name: name, size: 56),
+        const SizedBox(height: 8),
+        Text(role,
+            style: PayPactTypography.label
+                .copyWith(color: pt.ink3, letterSpacing: 1.5, fontSize: 10)),
+        const SizedBox(height: 2),
+        Text(label,
+            style: PayPactTypography.bodyMd
+                .copyWith(color: pt.ink, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
 }
 
 class _AmtChip extends StatelessWidget {
@@ -407,6 +721,52 @@ class _AmtChip extends StatelessWidget {
                 color: selected ? Colors.white : pt.ink,
                 fontWeight: FontWeight.w600,
                 fontSize: 13)),
+      ),
+    );
+  }
+}
+
+// Two-line amount chip used in the web settle modal.
+class _WebAmtChip extends StatelessWidget {
+  const _WebAmtChip({
+    required this.top,
+    required this.bottom,
+    required this.selected,
+    required this.onTap,
+  });
+  final String top;
+  final String bottom;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? pt.accent : pt.surface,
+          borderRadius: PayPactRadius.md,
+          border: Border.all(color: selected ? pt.accent : pt.border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(top,
+                style: PayPactTypography.bodyMd.copyWith(
+                    color: selected ? Colors.white : pt.ink,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14)),
+            const SizedBox(height: 1),
+            Text(bottom,
+                style: PayPactTypography.micro.copyWith(
+                    color: selected
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : pt.ink3)),
+          ],
+        ),
       ),
     );
   }

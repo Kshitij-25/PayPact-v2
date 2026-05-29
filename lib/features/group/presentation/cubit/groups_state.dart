@@ -1,5 +1,22 @@
 part of 'groups_cubit.dart';
 
+class MemberBalanceItem {
+  const MemberBalanceItem({
+    required this.userId,
+    required this.name,
+    required this.netBalance,
+    required this.currency,
+    required this.groupName,
+    this.daysSilent = 0,
+  });
+  final String userId;
+  final String name;
+  final double netBalance; // positive = they owe me, negative = I owe them
+  final String currency;
+  final String groupName;
+  final int daysSilent;
+}
+
 class SmartNudgeData {
   const SmartNudgeData({
     required this.memberName,
@@ -59,12 +76,16 @@ class GroupsLoaded extends GroupsState {
     this.weeklyDelta = 0,
     this.smartNudge,
     this.recentExpenses = const [],
+    this.memberBalances = const [],
+    this.avgSettleDays = 0,
   });
   final List<GroupEntity> groups;
   final double totalNetBalance;
   final double weeklyDelta;
   final SmartNudgeData? smartNudge;
   final List<RecentExpenseItem> recentExpenses;
+  final List<MemberBalanceItem> memberBalances;
+  final double avgSettleDays;
 }
 
 class GroupsError extends GroupsState {
