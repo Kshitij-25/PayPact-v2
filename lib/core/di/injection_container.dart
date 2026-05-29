@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:get_it/get_it.dart';
 import 'package:paypact/core/services/exchange_rate_service.dart';
+import 'package:paypact/core/services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:paypact/core/theme/theme_cubit.dart';
 import 'package:paypact/features/activity/cubit/activity_cubit.dart';
@@ -36,6 +37,10 @@ Future<void> initializeDependencies() async {
   // Services
   locator.registerLazySingleton<ExchangeRateService>(
       () => ExchangeRateService(locator<Dio>()));
+  locator.registerLazySingleton<NotificationService>(() => NotificationService(
+        locator<FirebaseMessaging>(),
+        locator<FirebaseFirestore>(),
+      ));
 
   // Repositories
   locator.registerLazySingleton<AuthRepository>(() => FirebaseAuthRepository(

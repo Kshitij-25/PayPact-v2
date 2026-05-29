@@ -11,6 +11,7 @@ import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/group/presentation/cubit/group_settings_cubit.dart';
+import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
 class GroupSettingsScreen extends StatelessWidget {
@@ -20,8 +21,11 @@ class GroupSettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) =>
-          GroupSettingsCubit(locator<GroupRepository>(), groupId)..load(),
+      create: (_) => GroupSettingsCubit(
+            locator<GroupRepository>(),
+            locator<NotificationsRepository>(),
+            groupId,
+          )..load(),
       child: _GroupSettingsBody(groupId: groupId),
     );
   }
@@ -66,11 +70,13 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
     super.dispose();
   }
 
-  void _save(BuildContext context) {
+  void _save(BuildContext context, String actorId, String actorName) {
     context.read<GroupSettingsCubit>().save(
           name: _nameCtrl.text.trim(),
           emoji: _emoji,
           category: _category,
+          actorId: actorId,
+          actorName: actorName,
         );
   }
 
@@ -80,6 +86,8 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
     final authState = context.watch<AuthCubit>().state;
     final currentUserId =
         authState is AuthAuthenticated ? authState.user.id : '';
+    final currentUserName =
+        authState is AuthAuthenticated ? authState.user.name : '';
 
     return BlocConsumer<GroupSettingsCubit, GroupSettingsState>(
       listener: (context, state) {
@@ -116,7 +124,7 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
           body: loading
               ? const Center(child: CircularProgressIndicator())
               : _buildContent(context, pt, group!, isAdmin, saving,
-                  currentUserId),
+                  currentUserId, currentUserName),
         );
       },
     );
@@ -129,6 +137,7 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
     bool isAdmin,
     bool saving,
     String currentUserId,
+    String currentUserName,
   ) {
     return Stack(
       children: [
@@ -140,7 +149,9 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
                 dirty: _dirty,
                 saving: saving,
                 onBack: () => context.pop(),
-                onSave: _dirty && !saving ? () => _save(context) : null,
+                onSave: _dirty && !saving
+                    ? () => _save(context, currentUserId, currentUserName)
+                    : null,
               ),
               Expanded(
                 child: SingleChildScrollView(
@@ -162,7 +173,8 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
                         group: group,
                         currentUserId: currentUserId,
                         isAdmin: isAdmin,
-                        onRemove: (uid) => _confirmRemove(context, group, uid),
+                        onRemove: (uid) => _confirmRemove(
+                            context, group, uid, currentUserId, currentUserName),
                         onAddMembers: () => context.push(
                             '/group/add-members',
                             extra: {'groupId': group.id}),
@@ -173,8 +185,10 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
                       _PreferencesSection(
                         group: group,
                         isAdmin: isAdmin,
-                        onDelete: () => _confirmDelete(context),
-                        onLeave: () => _confirmLeave(context, currentUserId),
+                        onDelete: () => _confirmDelete(
+                            context, currentUserId, currentUserName),
+                        onLeave: () => _confirmLeave(
+                            context, currentUserId, currentUserName),
                       ),
                     ],
                   ),
@@ -319,8 +333,8 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
     );
   }
 
-  void _confirmRemove(
-      BuildContext context, GroupEntity group, String userId) {
+  void _confirmRemove(BuildContext context, GroupEntity group, String userId,
+      String actorId, String actorName) {
     final name = group.memberNames[userId] ?? 'this member';
     showDialog(
       context: context,
@@ -334,7 +348,11 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.read<GroupSettingsCubit>().removeMember(userId);
+              context.read<GroupSettingsCubit>().removeMember(
+                    userId,
+                    actorId: actorId,
+                    actorName: actorName,
+                  );
             },
             child: Text('Remove',
                 style: TextStyle(color: context.pt.negative)),
@@ -344,7 +362,8 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
     );
   }
 
-  void _confirmDelete(BuildContext context) {
+  void _confirmDelete(
+      BuildContext context, String actorId, String actorName) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -358,7 +377,10 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.read<GroupSettingsCubit>().deleteGroup();
+              context.read<GroupSettingsCubit>().deleteGroup(
+                    actorId: actorId,
+                    actorName: actorName,
+                  );
             },
             child: Text('Delete',
                 style: TextStyle(color: context.pt.negative)),
@@ -368,7 +390,8 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
     );
   }
 
-  void _confirmLeave(BuildContext context, String userId) {
+  void _confirmLeave(
+      BuildContext context, String userId, String actorName) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -381,7 +404,11 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.read<GroupSettingsCubit>().removeMember(userId);
+              context.read<GroupSettingsCubit>().removeMember(
+                    userId,
+                    actorId: userId,
+                    actorName: actorName,
+                  );
             },
             child: Text('Leave',
                 style: TextStyle(color: context.pt.negative)),

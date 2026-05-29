@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/app_router.dart';
+import 'package:paypact/core/services/notification_service.dart';
 import 'package:paypact/core/theme/theme_cubit.dart';
 import 'package:paypact/design_system/theme/paypact_theme.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
@@ -15,7 +16,14 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await initializeDependencies();
-  locator<AuthCubit>().init();
+  await locator<NotificationService>().initialize();
+  final authCubit = locator<AuthCubit>();
+  authCubit.init();
+  authCubit.stream.listen((state) {
+    if (state is AuthAuthenticated) {
+      locator<NotificationService>().saveToken(state.user.id);
+    }
+  });
   runApp(const PaypactApp());
 }
 

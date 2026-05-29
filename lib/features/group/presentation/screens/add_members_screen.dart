@@ -27,6 +27,7 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
   final Set<String> _selectedIds = {};
   final Map<String, UserResult> _selectedUsers = {};
   String? _groupName;
+  List<String> _existingMemberIds = [];
   List<_CircleUser> _circleUsers = [];
 
   @override
@@ -44,7 +45,12 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
     if (widget.groupId != null) {
       final group =
           await locator<GroupRepository>().getGroup(widget.groupId!);
-      if (mounted) setState(() => _groupName = group?.name);
+      if (mounted) {
+        setState(() {
+          _groupName = group?.name;
+          _existingMemberIds = group?.memberIds ?? [];
+        });
+      }
     }
 
     // Build circle from existing groups (no extra Firestore calls — memberNames already has names)
@@ -454,6 +460,7 @@ class _AddMembersScreenState extends State<AddMembersScreen> {
                                         actorId: actorId,
                                         actorName: actorName,
                                         groupName: _groupName,
+                                        existingMemberIds: _existingMemberIds,
                                       );
                                 },
                           label: loading

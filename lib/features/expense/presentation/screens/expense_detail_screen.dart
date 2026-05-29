@@ -14,6 +14,7 @@ import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/expense/presentation/cubit/expense_detail_cubit.dart';
+import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
 class ExpenseDetailScreen extends StatelessWidget {
@@ -32,6 +33,7 @@ class ExpenseDetailScreen extends StatelessWidget {
     return BlocProvider(
       create: (_) => ExpenseDetailCubit(
         locator<ExpenseRepository>(),
+        locator<NotificationsRepository>(),
         groupId,
         expenseId,
         userId,
@@ -274,7 +276,12 @@ class _ExpenseDetailBody extends StatelessWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await context.read<ExpenseDetailCubit>().delete();
+              final auth = context.read<AuthCubit>().state;
+              final actorName =
+                  auth is AuthAuthenticated ? auth.user.name : '';
+              await context.read<ExpenseDetailCubit>().delete(
+                    actorName: actorName,
+                  );
               if (context.mounted) context.pop();
             },
             child:

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/services/notification_service.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/spacing.dart';
@@ -24,6 +25,7 @@ class NotificationsScreen extends StatelessWidget {
     return BlocProvider(
       create: (_) => NotificationsCubit(
         locator<NotificationsRepository>(),
+        locator<NotificationService>(),
         authState.user.id,
       )..load(),
       child: const _NotificationsBody(),
@@ -220,8 +222,12 @@ class _NotifTile extends StatelessWidget {
 
   IconData get _icon => switch (notif.type) {
         'expense_added' => Icons.receipt_long_outlined,
+        'expense_deleted' => Icons.delete_outline_rounded,
         'member_added' => Icons.group_add_outlined,
+        'member_removed' => Icons.person_remove_outlined,
         'settlement' => Icons.handshake_outlined,
+        'group_updated' => Icons.edit_outlined,
+        'group_deleted' => Icons.delete_forever_outlined,
         _ => Icons.notifications_none_rounded,
       };
 
