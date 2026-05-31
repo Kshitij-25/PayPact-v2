@@ -22,24 +22,32 @@ class NotificationService {
   NotificationService(this._messaging, this._firestore);
 
   Future<void> initialize() async {
-    if (!kIsWeb) {
+    try {
+      if (kIsWeb) {
+        // Web push needs the Notification API + a service worker, which many
+        // mobile browsers (notably iOS Safari outside an installed PWA) don't
+        // support. Bail out there so we never prompt for — or crash on —
+        // notification permissions, which would otherwise blank the page.
+        if (!await _messaging.isSupported()) return;
+        await _messaging.requestPermission(alert: true, badge: true, sound: true);
+        return;
+      }
+
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       await _initLocalNotifications();
+
+      await _messaging.requestPermission(alert: true, badge: true, sound: true);
+
+      // Show a local notification for foreground FCM messages (mobile only).
+      FirebaseMessaging.onMessage.listen((message) {
+        final n = message.notification;
+        if (n != null) {
+          showLocalNotification(title: n.title ?? '', body: n.body ?? '');
+        }
+      });
+    } catch (e) {
+      debugPrint('NotificationService.initialize failed: $e');
     }
-
-    await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    // Show local notification for foreground FCM messages (mobile only)
-    FirebaseMessaging.onMessage.listen((message) {
-      final n = message.notification;
-      if (n != null && !kIsWeb) {
-        showLocalNotification(title: n.title ?? '', body: n.body ?? '');
-      }
-    });
   }
 
   Future<void> _initLocalNotifications() async {
@@ -96,6 +104,7 @@ class NotificationService {
 
   Future<void> saveToken(String userId) async {
     try {
+      if (kIsWeb && !await _messaging.isSupported()) return;
       final token = kIsWeb
           ? await _messaging.getToken(
               vapidKey:

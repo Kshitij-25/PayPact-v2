@@ -42,6 +42,13 @@ String _fmtAmt(double amount, String symbol) {
 String _currentMonthLabel() =>
     DateFormat('MMMM').format(DateTime.now()).toUpperCase();
 
+String _greeting() {
+  final hour = DateTime.now().hour;
+  if (hour < 12) return 'Good morning,';
+  if (hour < 17) return 'Good afternoon,';
+  return 'Good evening,';
+}
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -210,7 +217,7 @@ class _MobileHomeBody extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('Good morning,',
+                        Text(_greeting(),
                             style: PayPactTypography.bodySm
                                 .copyWith(color: pt.ink3)),
                         Text(firstName,

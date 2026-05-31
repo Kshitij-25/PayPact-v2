@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -19,7 +21,7 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await initializeDependencies();
-  await locator<NotificationService>().initialize();
+
   final authCubit = locator<AuthCubit>();
   authCubit.init();
   authCubit.stream.listen((state) {
@@ -27,7 +29,13 @@ void main() async {
       locator<NotificationService>().saveToken(state.user.id);
     }
   });
+
   runApp(const PaypactApp());
+
+  // Set up push notifications after the app is running. Kept off the startup
+  // await-chain so a failure (e.g. mobile browsers without web-push support)
+  // can never block the UI from rendering.
+  unawaited(locator<NotificationService>().initialize());
 }
 
 class PaypactApp extends StatelessWidget {
