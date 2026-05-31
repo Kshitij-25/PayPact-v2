@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_bottom_nav.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
+import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
+import 'package:paypact/features/group/presentation/cubit/groups_cubit.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
 const double _sidebarW = 264;
@@ -146,6 +149,35 @@ class AdaptiveNavScaffold extends StatelessWidget {
     }
 
     // ── Desktop: full web sidebar + topbar ──────────────────────────────
+    // Derive the workspace net balance + identity from the globally-provided
+    // cubits so the sidebar is consistent on every screen, falling back to the
+    // explicit props when a screen supplies them or the cubit isn't ready.
+    final groupsState = context.watch<GroupsCubit>().state;
+    final authState = context.watch<AuthCubit>().state;
+
+    final String sidebarBalance;
+    final bool sidebarOwe;
+    final bool sidebarSettled;
+    final int sidebarGroupCount;
+    if (groupsState is GroupsLoaded) {
+      final t = groupsState.totalNetBalance;
+      sidebarBalance = PpAmount.format(t.abs().round());
+      sidebarOwe = t < -0.5;
+      sidebarSettled = t.abs() <= 0.5;
+      sidebarGroupCount = groupsState.groups.length;
+    } else {
+      sidebarBalance = webBalance.replaceAll(RegExp(r'^[+\-−]'), '');
+      sidebarOwe = !webBalancePositive;
+      sidebarSettled = webBalance.isEmpty;
+      sidebarGroupCount = groupCount;
+    }
+
+    final sidebarUserName =
+        authState is AuthAuthenticated ? authState.user.name : webUserName;
+    final sidebarUserHandle = authState is AuthAuthenticated
+        ? '@${authState.user.name.split(' ').first.toLowerCase()}'
+        : webUserHandle;
+
     return Scaffold(
       backgroundColor: bg,
       body: Row(
@@ -159,12 +191,13 @@ class AdaptiveNavScaffold extends StatelessWidget {
             onInsightsTap: onInsightsTap,
             onNotificationsTap: onNotificationsTap,
             onSettingsTap: onSettingsTap,
-            userName: webUserName,
-            userHandle: webUserHandle,
-            balance: webBalance,
-            balancePositive: webBalancePositive,
+            userName: sidebarUserName,
+            userHandle: sidebarUserHandle,
+            balance: sidebarBalance,
+            balanceOwe: sidebarOwe,
+            balanceSettled: sidebarSettled,
             notificationCount: notificationCount,
-            groupCount: groupCount,
+            groupCount: sidebarGroupCount,
           ),
           const VerticalDivider(width: 1, thickness: 1),
           Expanded(
@@ -202,7 +235,8 @@ class _WebSidebar extends StatelessWidget {
     required this.userName,
     required this.userHandle,
     required this.balance,
-    required this.balancePositive,
+    required this.balanceOwe,
+    required this.balanceSettled,
     required this.notificationCount,
     required this.groupCount,
     this.onInsightsTap,
@@ -217,7 +251,8 @@ class _WebSidebar extends StatelessWidget {
   final String userName;
   final String userHandle;
   final String balance;
-  final bool balancePositive;
+  final bool balanceOwe;
+  final bool balanceSettled;
   final int notificationCount;
   final int groupCount;
   final VoidCallback? onInsightsTap;
@@ -248,7 +283,9 @@ class _WebSidebar extends StatelessWidget {
                   if (balance.isNotEmpty) ...[
                     _BalanceCard(
                       balance: balance,
-                      positive: balancePositive,
+                      owe: balanceOwe,
+                      settled: balanceSettled,
+                      groupCount: groupCount,
                       pt: pt,
                     ),
                     const SizedBox(height: 20),
@@ -412,16 +449,25 @@ class _LogoPainter extends CustomPainter {
 class _BalanceCard extends StatelessWidget {
   const _BalanceCard({
     required this.balance,
-    required this.positive,
+    required this.owe,
+    required this.settled,
+    required this.groupCount,
     required this.pt,
   });
   final String balance;
-  final bool positive;
+  final bool owe;
+  final bool settled;
+  final int groupCount;
   final PayPactThemeExtension pt;
 
   @override
   Widget build(BuildContext context) {
-    final balanceColor = positive ? pt.positive : pt.negative;
+    final balanceColor =
+        settled ? pt.ink2 : (owe ? pt.negative : pt.positive);
+    final eyebrow =
+        settled ? 'NET BALANCE' : (owe ? 'YOU OWE' : "YOU'RE OWED");
+    final groupsLabel =
+        groupCount > 0 ? 'across $groupCount groups' : 'across your groups';
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
@@ -433,12 +479,12 @@ class _BalanceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'NET BALANCE',
+            eyebrow,
             style: GoogleFonts.geistMono(
               fontSize: 9.5,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.12 * 9.5,
-              color: pt.ink3,
+              color: settled ? pt.ink3 : balanceColor,
             ),
           ),
           const SizedBox(height: 6),
@@ -446,9 +492,9 @@ class _BalanceCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  balance,
+                  settled ? 'Settled up' : balance,
                   style: GoogleFonts.geistMono(
-                    fontSize: 22,
+                    fontSize: settled ? 18 : 22,
                     fontWeight: FontWeight.w500,
                     letterSpacing: -0.02 * 22,
                     color: balanceColor,
@@ -456,12 +502,18 @@ class _BalanceCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(Icons.trending_up_rounded, size: 14, color: pt.positive),
+              if (!settled)
+                Icon(
+                    owe
+                        ? Icons.trending_down_rounded
+                        : Icons.trending_up_rounded,
+                    size: 14,
+                    color: balanceColor),
             ],
           ),
           const SizedBox(height: 3),
           Text(
-            'across your groups',
+            settled ? 'across your groups' : groupsLabel,
             style: GoogleFonts.geist(
               fontSize: 11,
               color: pt.ink3,

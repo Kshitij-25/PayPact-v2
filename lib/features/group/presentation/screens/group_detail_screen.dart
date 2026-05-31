@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +18,7 @@ import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/group/presentation/cubit/group_detail_cubit.dart';
+import 'package:paypact/features/settle/domain/debt_simplifier.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
 class GroupDetailScreen extends StatelessWidget {
@@ -679,65 +678,8 @@ String _capitalize(String s) =>
     s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
 // ── Debt simplification ────────────────────────────────────────────────────────
-
-class _SimplifiedDebt {
-  final String fromId;
-  final String fromName;
-  final String toId;
-  final String toName;
-  final double amount;
-  const _SimplifiedDebt({
-    required this.fromId,
-    required this.fromName,
-    required this.toId,
-    required this.toName,
-    required this.amount,
-  });
-}
-
-/// Greedy min-transaction algorithm (same as Splitwise).
-/// Positive balance = creditor (owed money), negative = debtor (owes money).
-List<_SimplifiedDebt> _simplifyDebts(
-  Map<String, double> globalBal,
-  Map<String, String> memberNames,
-) {
-  final bal = Map<String, double>.from(globalBal);
-  final result = <_SimplifiedDebt>[];
-  const threshold = 0.01;
-
-  while (true) {
-    String? creditorId;
-    String? debtorId;
-    double maxCredit = threshold;
-    double maxDebt = threshold;
-
-    for (final e in bal.entries) {
-      if (e.value > maxCredit) {
-        maxCredit = e.value;
-        creditorId = e.key;
-      }
-      if (e.value < -maxDebt) {
-        maxDebt = -e.value;
-        debtorId = e.key;
-      }
-    }
-
-    if (creditorId == null || debtorId == null) break;
-
-    final amount = min(maxCredit, maxDebt);
-    result.add(_SimplifiedDebt(
-      fromId: debtorId,
-      fromName: memberNames[debtorId] ?? 'Member',
-      toId: creditorId,
-      toName: memberNames[creditorId] ?? 'Member',
-      amount: amount,
-    ));
-    bal[creditorId] = maxCredit - amount;
-    bal[debtorId] = -maxDebt + amount;
-  }
-
-  return result;
-}
+// The minimization algorithm lives in the domain layer (decimal-safe, tested):
+// lib/features/settle/domain/debt_simplifier.dart. Screens just render its output.
 
 class _SimplifiedDebtsSection extends StatelessWidget {
   const _SimplifiedDebtsSection({
@@ -759,7 +701,7 @@ class _SimplifiedDebtsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
-    final debts = _simplifyDebts(
+    final debts = simplifyDebtsFromBalances(
       loaded.globalMemberBalances,
       Map<String, String>.from(loaded.group.memberNames),
     );
@@ -840,7 +782,7 @@ class _DebtRow extends StatelessWidget {
     required this.fmt,
   });
 
-  final _SimplifiedDebt debt;
+  final SimplifiedDebt debt;
   final String currency;
   final String groupId;
   final String groupName;
@@ -851,25 +793,25 @@ class _DebtRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
-    final isMyDebt = debt.fromId == currentUserId;
-    final isMyCredit = debt.toId == currentUserId;
+    final isMyDebt = debt.fromUserId == currentUserId;
+    final isMyCredit = debt.toUserId == currentUserId;
     final highlight = isMyDebt || isMyCredit;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(children: [
-        PpAvatar(name: debt.fromName, size: 36),
+        PpAvatar(name: debt.fromUserName, size: 36),
         const SizedBox(width: 8),
         Icon(Icons.arrow_forward_rounded, size: 14, color: pt.ink3),
         const SizedBox(width: 8),
-        PpAvatar(name: debt.toName, size: 36),
+        PpAvatar(name: debt.toUserName, size: 36),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${debt.fromName.split(' ').first} → ${debt.toName.split(' ').first}',
+                '${debt.fromUserName.split(' ').first} → ${debt.toUserName.split(' ').first}',
                 style: PayPactTypography.bodyMd.copyWith(
                   color: pt.ink,
                   fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
@@ -906,8 +848,8 @@ class _DebtRow extends StatelessWidget {
               extra: {
                 'fromUserId': currentUserId,
                 'fromUserName': currentUserName,
-                'toUserId': debt.toId,
-                'toUserName': debt.toName,
+                'toUserId': debt.toUserId,
+                'toUserName': debt.toUserName,
                 'suggestedAmount': debt.amount,
                 'currency': currency,
                 'groupName': groupName,
@@ -1327,7 +1269,7 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
 
   Widget _settlePlanView(
       BuildContext context, PayPactThemeExtension pt, String sym) {
-    final debts = _simplifyDebts(
+    final debts = simplifyDebtsFromBalances(
       loaded.globalMemberBalances,
       Map<String, String>.from(group.memberNames),
     );
@@ -1438,6 +1380,31 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
     );
   }
 
+  void _openSettleTopMember(BuildContext context) {
+    final entries = loaded.memberBalances.entries
+        .where((e) => e.value.abs() > 0.01)
+        .toList()
+      ..sort((a, b) => b.value.abs().compareTo(a.value.abs()));
+    if (entries.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("You're all settled up in this group.")));
+      return;
+    }
+    final memberId = entries.first.key;
+    final balance = entries.first.value;
+    final memberName = (group.memberNames[memberId] as String?) ?? 'Member';
+    final youOwe = balance < 0; // < 0 → I owe them
+    context.push('/group/$groupId/settle', extra: {
+      'fromUserId': youOwe ? _uid : memberId,
+      'fromUserName': youOwe ? _uname : memberName,
+      'toUserId': youOwe ? memberId : _uid,
+      'toUserName': youOwe ? memberName : _uname,
+      'suggestedAmount': balance.abs(),
+      'currency': group.currency,
+      'groupName': group.name,
+    });
+  }
+
   Widget _balanceCard(
       BuildContext context, PayPactThemeExtension pt, String sym) {
     final net = loaded.netBalance;
@@ -1447,30 +1414,39 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
         loaded.memberBalances.values.where((v) => v < -0.01).length;
     final hasBalance =
         loaded.memberBalances.values.any((v) => v.abs() > 0.01);
+    final settled = net.abs() <= 0.5;
+    final owe = net < 0;
+    final dirColor = settled ? pt.ink2 : (owe ? pt.negative : pt.positive);
     return PayPactCard(
       raised: true,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('YOUR BALANCE HERE',
-              style: PayPactTypography.label
-                  .copyWith(color: pt.ink3, letterSpacing: 1.6, fontSize: 10)),
+          Text(
+              settled
+                  ? 'YOUR BALANCE HERE'
+                  : (owe ? 'YOU OWE OVERALL' : "YOU'RE OWED OVERALL"),
+              style: PayPactTypography.label.copyWith(
+                  color: settled ? pt.ink3 : dirColor,
+                  letterSpacing: 1.6,
+                  fontSize: 10)),
           const SizedBox(height: 10),
           Text(
-            '${net >= 0 ? '+' : '−'}$sym${net.abs().toStringAsFixed(0)}',
-            style: PayPactTypography.amountHero.copyWith(
-                color: net >= 0 ? pt.positive : pt.negative, fontSize: 38),
+            settled ? 'Settled up' : '$sym${net.abs().toStringAsFixed(0)}',
+            style: PayPactTypography.amountHero
+                .copyWith(color: dirColor, fontSize: settled ? 30 : 38),
           ),
           const SizedBox(height: 4),
           Text(
-            '$oweYou ${oweYou == 1 ? 'person owes' : 'people owe'} you · $youOwe you owe',
+            settled
+                ? "Everyone's square in this group"
+                : '$oweYou ${oweYou == 1 ? 'person owes' : 'people owe'} you · $youOwe you owe',
             style: PayPactTypography.bodySm.copyWith(color: pt.ink3),
           ),
           const SizedBox(height: 16),
           PayPactButton(
-            onPressed:
-                hasBalance ? () => setState(() => _activeTab = 'settle') : null,
+            onPressed: hasBalance ? () => _openSettleTopMember(context) : null,
             label: hasBalance ? 'Settle up' : "You're settled up",
             variant: PayPactButtonVariant.accent,
             isFullWidth: true,
@@ -1536,12 +1512,23 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
                       ],
                     ),
                   ),
-                  Text(
-                    '${v >= 0 ? '+' : '−'}$sym${v.abs().toStringAsFixed(0)}',
-                    style: PayPactTypography.amountMd.copyWith(
-                        color: v >= 0 ? pt.positive : pt.negative,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(v >= 0 ? 'OWES YOU' : 'YOU OWE',
+                          style: PayPactTypography.label.copyWith(
+                              color: pt.ink3,
+                              fontSize: 8,
+                              letterSpacing: 1.0)),
+                      const SizedBox(height: 1),
+                      Text(
+                        '$sym${v.abs().toStringAsFixed(0)}',
+                        style: PayPactTypography.amountMd.copyWith(
+                            color: v >= 0 ? pt.positive : pt.negative,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14),
+                      ),
+                    ],
                   ),
                 ]),
               );
@@ -1555,7 +1542,7 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
 
   Widget _autoSimplifiedCard(
       BuildContext context, PayPactThemeExtension pt, String sym) {
-    final debts = _simplifyDebts(
+    final debts = simplifyDebtsFromBalances(
       loaded.globalMemberBalances,
       Map<String, String>.from(group.memberNames),
     );
@@ -1689,9 +1676,13 @@ class _WebExpenseRow extends StatelessWidget {
                         .copyWith(color: pt.ink, fontSize: 16)),
                 const SizedBox(height: 2),
                 Text(
-                  '${paidByMe ? '+' : '−'}$sym${shareAmt.abs().toStringAsFixed(0)}',
+                  shareAmt.abs() <= 0.5
+                      ? 'settled'
+                      : '${paidByMe ? 'you get' : 'you owe'} $sym${shareAmt.abs().toStringAsFixed(0)}',
                   style: PayPactTypography.bodySm.copyWith(
-                    color: paidByMe ? pt.positive : pt.negative,
+                    color: shareAmt.abs() <= 0.5
+                        ? pt.ink3
+                        : (paidByMe ? pt.positive : pt.negative),
                     fontWeight: FontWeight.w600,
                   ),
                 ),

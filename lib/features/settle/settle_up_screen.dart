@@ -13,9 +13,12 @@ import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
 import 'package:paypact/features/settle/cubit/settle_cubit.dart';
+import 'package:paypact/features/settle/domain/settlement_entity.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
+import 'package:uuid/uuid.dart';
 
 class SettleUpScreen extends StatelessWidget {
   const SettleUpScreen({
@@ -45,6 +48,7 @@ class SettleUpScreen extends StatelessWidget {
       create: (_) => SettleCubit(
         locator<ExpenseRepository>(),
         locator<NotificationsRepository>(),
+        locator<GroupRepository>(),
       ),
       child: _SettleUpBody(
         groupId: groupId,
@@ -88,6 +92,25 @@ class _SettleUpBody extends StatefulWidget {
 class _SettleUpBodyState extends State<_SettleUpBody> {
   late double _amount;
   int _selectedMethod = 0;
+
+  // One key per settle flow: a double-tap on Confirm reuses it, so the
+  // repository dedupes the write instead of recording two payments. A fresh
+  // navigation to this screen mints a new key = a legitimately separate payment.
+  final String _idempotencyKey = const Uuid().v4();
+
+  // Index-aligned with _methods / _webMethods so the selected tile maps to a
+  // stored payment method. Only cash is confirmable today; the rest are ready
+  // for when external providers are wired.
+  static const _methodIds = [
+    PaymentMethod.cash,
+    PaymentMethod.wallet,
+    PaymentMethod.upi,
+    PaymentMethod.bankTransfer,
+  ];
+
+  String get _paymentMethod => _selectedMethod < _methodIds.length
+      ? _methodIds[_selectedMethod]
+      : PaymentMethod.cash;
 
   static const _methods = [
     _Method('Mark as paid in cash', 'No transfer · just record it',
@@ -355,6 +378,8 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
                                     toUserId: widget.toUserId,
                                     toUserName: widget.toUserName,
                                     amount: _amount,
+                                    idempotencyKey: _idempotencyKey,
+                                    paymentMethod: _paymentMethod,
                                   );
                             },
                       label: loading
@@ -653,6 +678,8 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
                                                 toUserId: widget.toUserId,
                                                 toUserName: widget.toUserName,
                                                 amount: _amount,
+                                                idempotencyKey: _idempotencyKey,
+                                                paymentMethod: _paymentMethod,
                                               ),
                                   label: loading
                                       ? 'Recording…'

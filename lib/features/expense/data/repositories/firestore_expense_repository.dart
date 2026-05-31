@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:paypact/features/expense/data/models/expense_model.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/settle/data/settlement_model.dart';
+import 'package:paypact/features/settle/domain/settlement_entity.dart';
 
 class FirestoreExpenseRepository implements ExpenseRepository {
   final FirebaseFirestore _firestore;
@@ -83,27 +85,59 @@ class FirestoreExpenseRepository implements ExpenseRepository {
   }
 
   @override
-  Future<void> recordSettlement({
+  Future<SettlementEntity> recordSettlement({
     required String groupId,
     required String fromUserId,
     required String fromUserName,
     required String toUserId,
     required String toUserName,
-    required double amount,
+    required int amountPaise,
+    required String currency,
+    required String createdById,
+    required String idempotencyKey,
+    required String receiptId,
+    String paymentMethod = PaymentMethod.cash,
+    String status = PaymentStatus.completed,
+    String? note,
+    String? provider,
   }) async {
-    await _settlementsRef(groupId).add({
-      'fromUserId': fromUserId,
-      'fromUserName': fromUserName,
-      'toUserId': toUserId,
-      'toUserName': toUserName,
-      'amount': amount,
-      'createdAt': FieldValue.serverTimestamp(),
+    // The idempotency key IS the document id: writing the same settlement twice
+    // (double-tap, retry) lands on the same doc, so we can detect and skip it.
+    final settlementRef = _settlementsRef(groupId).doc(idempotencyKey);
+    final groupRef = _firestore.collection('groups').doc(groupId);
+
+    final model = SettlementModel(
+      id: idempotencyKey,
+      groupId: groupId,
+      fromUserId: fromUserId,
+      fromUserName: fromUserName,
+      toUserId: toUserId,
+      toUserName: toUserName,
+      amountPaise: amountPaise,
+      currency: currency,
+      note: note,
+      paymentMethod: paymentMethod,
+      status: status,
+      provider: provider,
+      createdById: createdById,
+      idempotencyKey: idempotencyKey,
+      receiptId: receiptId,
+      createdAt: DateTime.now(),
+    );
+
+    // Single transaction makes the settlement-create and the group touch atomic,
+    // and guarantees the duplicate check + write can't interleave.
+    return _firestore.runTransaction<SettlementEntity>((txn) async {
+      final existing = await txn.get(settlementRef);
+      if (existing.exists) {
+        // Already recorded under this key — return it unchanged (no double pay).
+        return SettlementModel.fromFirestore(existing, groupId);
+      }
+      txn.set(settlementRef, model.toMap());
+      // Touch group so watchUserGroups fires and home balances refresh.
+      txn.update(groupRef, {'updatedAt': FieldValue.serverTimestamp()});
+      return model;
     });
-    // Touch group so watchUserGroups fires and home balances refresh
-    await _firestore
-        .collection('groups')
-        .doc(groupId)
-        .update({'updatedAt': FieldValue.serverTimestamp()});
   }
 
   @override

@@ -7,6 +7,7 @@ class MemberBalanceItem {
     required this.netBalance,
     required this.currency,
     required this.groupName,
+    this.groupId = '',
     this.daysSilent = 0,
   });
   final String userId;
@@ -14,6 +15,7 @@ class MemberBalanceItem {
   final double netBalance; // positive = they owe me, negative = I owe them
   final String currency;
   final String groupName;
+  final String groupId;
   final int daysSilent;
 }
 
@@ -63,6 +65,19 @@ class RecentExpenseItem {
   final String currency;
 }
 
+class GroupMeta {
+  const GroupMeta({
+    required this.totalSpent,
+    required this.expenseCount,
+    this.lastExpenseTitle = '',
+    this.lastActivityAt,
+  });
+  final double totalSpent;
+  final int expenseCount;
+  final String lastExpenseTitle;
+  final DateTime? lastActivityAt;
+}
+
 abstract class GroupsState {}
 
 class GroupsInitial extends GroupsState {}
@@ -78,6 +93,7 @@ class GroupsLoaded extends GroupsState {
     this.recentExpenses = const [],
     this.memberBalances = const [],
     this.avgSettleDays = 0,
+    this.groupMetas = const {},
   });
   final List<GroupEntity> groups;
   final double totalNetBalance;
@@ -86,6 +102,7 @@ class GroupsLoaded extends GroupsState {
   final List<RecentExpenseItem> recentExpenses;
   final List<MemberBalanceItem> memberBalances;
   final double avgSettleDays;
+  final Map<String, GroupMeta> groupMetas;
 }
 
 class GroupsError extends GroupsState {

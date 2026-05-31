@@ -106,8 +106,8 @@ class _HomeBodyState extends State<_HomeBody> {
         final webTitle = loading
             ? null
             : totalBalance >= 0
-                ? '${PpAmount.format(totalBalance.round(), signed: true)} in your favour.'
-                : '${PpAmount.format(totalBalance.round(), signed: true)} to settle.';
+                ? '${PpAmount.format(totalBalance.abs().round())} in your favour.'
+                : '${PpAmount.format(totalBalance.abs().round())} to settle.';
 
         return AdaptiveNavScaffold(
           currentIndex: 0,
@@ -253,9 +253,13 @@ class _MobileHomeBody extends StatelessWidget {
                             ),
                           )
                         : Text(
-                            PpAmount.format(totalBalance.round(), signed: true),
+                            PpAmount.format(totalBalance.abs().round()),
                             style: PayPactTypography.amountHero.copyWith(
-                                color: pt.ink,
+                                color: totalBalance.abs() <= 0.5
+                                    ? pt.ink
+                                    : (totalBalance < 0
+                                        ? pt.negative
+                                        : pt.positive),
                                 fontSize: context.sp(64),
                                 letterSpacing: -0.045 * context.sp(64)),
                           ),
@@ -421,11 +425,29 @@ class _WebHomeBody extends StatelessWidget {
     }
 
     void settleUp() {
-      if (groups.isEmpty) return;
-      final owing = groups.where((g) => g.netBalance < 0).toList()
-        ..sort((a, b) => a.netBalance.compareTo(b.netBalance));
-      context
-          .push('/group/${(owing.isNotEmpty ? owing.first : groups.first).id}');
+      final settleable = memberBalances
+          .where((m) => m.groupId.isNotEmpty && m.netBalance.abs() >= 1)
+          .toList()
+        ..sort((a, b) => b.netBalance.abs().compareTo(a.netBalance.abs()));
+      if (settleable.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("You're all settled up.")));
+        return;
+      }
+      final m = settleable.first;
+      final auth = context.read<AuthCubit>().state;
+      final meId = auth is AuthAuthenticated ? auth.user.id : '';
+      final meName = auth is AuthAuthenticated ? auth.user.name : 'You';
+      final youOwe = m.netBalance < 0;
+      context.push('/group/${m.groupId}/settle', extra: {
+        'fromUserId': youOwe ? meId : m.userId,
+        'fromUserName': youOwe ? meName : m.name,
+        'toUserId': youOwe ? m.userId : meId,
+        'toUserName': youOwe ? m.name : meName,
+        'suggestedAmount': m.netBalance.abs(),
+        'currency': m.currency,
+        'groupName': m.groupName,
+      });
     }
 
     return Row(
@@ -865,15 +887,31 @@ class _WebHomeBody extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Text(
-                                  PpAmount.format(
-                                      memberBalances[i].netBalance.round(),
-                                      signed: true),
-                                  style: PayPactTypography.amountMd.copyWith(
-                                    color: memberBalances[i].netBalance >= 0
-                                        ? pt.positive
-                                        : pt.negative,
-                                  ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                        memberBalances[i].netBalance >= 0
+                                            ? 'OWES YOU'
+                                            : 'YOU OWE',
+                                        style: PayPactTypography.label.copyWith(
+                                            color: pt.ink3,
+                                            fontSize: 8,
+                                            letterSpacing: 1.0)),
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      PpAmount.format(memberBalances[i]
+                                          .netBalance
+                                          .abs()
+                                          .round()),
+                                      style:
+                                          PayPactTypography.amountMd.copyWith(
+                                        color: memberBalances[i].netBalance >= 0
+                                            ? pt.positive
+                                            : pt.negative,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -1360,10 +1398,22 @@ class _GroupTile extends StatelessWidget {
               style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
           const SizedBox(height: 10),
           Text(
-            PpAmount.format(group.netBalance.round(), signed: true),
+            group.netBalance.abs() <= 0.5
+                ? 'SETTLED'
+                : (group.netBalance > 0 ? 'YOU GET' : 'YOU OWE'),
+            style: PayPactTypography.label.copyWith(
+                color: pt.ink3, fontSize: 9, letterSpacing: 1.2),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            group.netBalance.abs() <= 0.5
+                ? '—'
+                : PpAmount.format(group.netBalance.abs().round()),
             style: PayPactTypography.amountLg.copyWith(
               fontSize: 18,
-              color: group.netBalance >= 0 ? pt.positive : pt.negative,
+              color: group.netBalance.abs() <= 0.5
+                  ? pt.ink3
+                  : (group.netBalance > 0 ? pt.positive : pt.negative),
             ),
           ),
         ],

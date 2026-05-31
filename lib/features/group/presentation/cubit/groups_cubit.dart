@@ -10,13 +10,26 @@ part 'groups_state.dart';
 class GroupsCubit extends Cubit<GroupsState> {
   final GroupRepository _groupRepo;
   final ExpenseRepository _expenseRepo;
-  final String _userId;
+  String _userId;
   StreamSubscription<List<GroupEntity>>? _sub;
 
   GroupsCubit(this._groupRepo, this._expenseRepo, this._userId)
       : super(GroupsInitial());
 
+  /// Switch the active user (used by the global instance on sign in/out)
+  /// and reload, without tearing down the widget tree.
+  void setUser(String userId) {
+    if (userId == _userId) return;
+    _userId = userId;
+    loadGroups();
+  }
+
   void loadGroups() {
+    _sub?.cancel();
+    if (_userId.isEmpty) {
+      if (!isClosed) emit(GroupsInitial());
+      return;
+    }
     emit(GroupsLoading());
     _sub = _groupRepo.watchUserGroups(_userId).listen(
       (groups) async {
@@ -46,8 +59,33 @@ class GroupsCubit extends Cubit<GroupsState> {
         final Map<String, String> memberGroupCurrency = {};
 
         final List<RecentExpenseItem> allExpenses = [];
+        final Map<String, GroupMeta> groupMetas = {};
 
         for (final (group, expenses, settlements) in results) {
+          // Per-group metadata: total spent, count, last activity
+          double groupTotal = 0;
+          DateTime? lastAt;
+          String lastTitle = '';
+          for (final e in expenses) {
+            groupTotal += e.amount;
+            if (lastAt == null || e.createdAt.isAfter(lastAt)) {
+              lastAt = e.createdAt;
+              lastTitle = e.title;
+            }
+          }
+          for (final s in settlements) {
+            final sAt = s['createdAt'] as DateTime?;
+            if (sAt != null && (lastAt == null || sAt.isAfter(lastAt))) {
+              lastAt = sAt;
+            }
+          }
+          groupMetas[group.id] = GroupMeta(
+            totalSpent: groupTotal,
+            expenseCount: expenses.length,
+            lastExpenseTitle: lastTitle,
+            lastActivityAt: lastAt,
+          );
+
           for (final e in expenses) {
             allExpenses.add(RecentExpenseItem(
               expenseId: e.id,
@@ -96,6 +134,8 @@ class GroupsCubit extends Cubit<GroupsState> {
                 owedToMember[e.paidById] =
                     (owedToMember[e.paidById] ?? 0) + myShare;
                 memberNames[e.paidById] ??= e.paidByName;
+                memberGroupNames[e.paidById] ??= group.name;
+                memberGroupIds[e.paidById] ??= group.id;
                 memberGroupCurrency[e.paidById] ??= group.currency;
               }
             }
@@ -149,6 +189,7 @@ class GroupsCubit extends Cubit<GroupsState> {
                   netBalance: e.value,
                   currency: memberGroupCurrency[e.key] ?? 'INR',
                   groupName: memberGroupNames[e.key] ?? '',
+                  groupId: memberGroupIds[e.key] ?? '',
                   daysSilent: () {
                     final last = memberLastActivity[e.key];
                     return last != null ? now.difference(last).inDays : 0;
@@ -220,6 +261,7 @@ class GroupsCubit extends Cubit<GroupsState> {
           memberBalances: memberBalances,
           avgSettleDays: avgSettleDays,
           recentExpenses: recentExpenses,
+          groupMetas: groupMetas,
         ));
       },
       onError: (e) => emit(GroupsError(e.toString())),

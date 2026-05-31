@@ -4,6 +4,7 @@ import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
+import 'package:paypact/features/settle/domain/debt_simplifier.dart';
 
 part 'group_detail_state.dart';
 
@@ -127,25 +128,17 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
     return bal;
   }
 
+  /// Net balance per member, in the group's base currency. Delegates to the
+  /// decimal-safe [computeNetBalances] (integer paise) so this matches exactly
+  /// what the debt simplifier settles, then converts back to rupees for display.
   Map<String, double> _globalMemberBalances(List<ExpenseEntity> expenses,
       List<Map<String, dynamic>> settlements, GroupEntity group) {
-    final Map<String, double> bal = {for (final id in group.memberIds) id: 0.0};
-    for (final e in expenses) {
-      for (final split in e.splits) {
-        if (split.userId != e.paidById) {
-          bal[e.paidById] = (bal[e.paidById] ?? 0) + split.amount;
-          bal[split.userId] = (bal[split.userId] ?? 0) - split.amount;
-        }
-      }
-    }
-    for (final s in settlements) {
-      final from = s['fromUserId'] as String;
-      final to = s['toUserId'] as String;
-      final amount = (s['amount'] as num).toDouble();
-      bal[from] = (bal[from] ?? 0) + amount;
-      bal[to] = (bal[to] ?? 0) - amount;
-    }
-    return bal;
+    final paise = computeNetBalances(
+      expenses: expenses,
+      settlements: settlements,
+      memberIds: group.memberIds,
+    );
+    return {for (final e in paise.entries) e.key: fromPaise(e.value)};
   }
 
   @override
