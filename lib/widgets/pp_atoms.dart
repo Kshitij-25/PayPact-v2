@@ -5,6 +5,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
+import 'package:paypact/widgets/doc_image.dart';
 import 'package:paypact/core/utils/default_currency.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -85,14 +86,12 @@ class PpAvatar extends StatelessWidget {
         alignment: Alignment.center,
         child: imageUrl == null
             ? initialsText
-            : Image.network(
+            : DocImage(
                 imageUrl!,
                 width: size,
                 height: size,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => initialsText,
-                loadingBuilder: (_, child, progress) =>
-                    progress == null ? child : initialsText,
+                placeholder: initialsText,
               ),
       ),
     );

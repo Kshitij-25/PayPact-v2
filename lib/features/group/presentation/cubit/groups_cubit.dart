@@ -3,11 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/services/exchange_rate_service.dart';
 import 'package:paypact/core/utils/default_currency.dart';
+import 'package:paypact/features/expense/data/recurring_runner.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/group/data/summary_service.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
+import 'package:paypact/features/notification/data/digest_service.dart';
 import 'package:paypact/features/settle/domain/debt_simplifier.dart';
 
 part 'groups_state.dart';
@@ -44,6 +46,8 @@ class GroupsCubit extends Cubit<GroupsState> {
   final ExchangeRateService? _rates;
   final String Function()? _defaultCurrency;
   final SummaryService? _summaries;
+  final RecurringRunner? _recurring;
+  final DigestService? _digest;
   String _userId;
   StreamSubscription<List<GroupEntity>>? _sub;
 
@@ -52,10 +56,14 @@ class GroupsCubit extends Cubit<GroupsState> {
   GroupsCubit(this._groupRepo, this._expenseRepo, this._userId,
       {ExchangeRateService? rates,
       String Function()? defaultCurrency,
-      SummaryService? summaries})
+      SummaryService? summaries,
+      RecurringRunner? recurring,
+      DigestService? digest})
       : _rates = rates,
         _defaultCurrency = defaultCurrency,
         _summaries = summaries,
+        _recurring = recurring,
+        _digest = digest,
         super(GroupsInitial());
 
   /// Switch the active user (used by the global instance on sign in/out)
@@ -92,6 +100,31 @@ class GroupsCubit extends Cubit<GroupsState> {
     } catch (_) {}
   }
 
+  /// Work the backend used to do on a schedule, done when the app opens:
+  /// recurring expenses that have fallen due, and the weekly digest.
+  void _housekeeping(List<GroupEntity> groups) {
+    if (_userId.isEmpty) return;
+    try {
+      final runner = _recurring ?? locator<RecurringRunner>();
+      for (final g in groups) {
+        runner
+            .runForGroup(
+              groupId: g.id,
+              groupName: g.name,
+              memberIds: g.memberIds,
+              actorId: _userId,
+              actorName: g.memberNames[_userId] ?? '',
+            )
+            .ignore();
+      }
+    } catch (_) {}
+    try {
+      (_digest ?? locator<DigestService>())
+          .maybeSend(_userId, groups)
+          .ignore();
+    } catch (_) {}
+  }
+
   void loadGroups() {
     _sub?.cancel();
     if (_userId.isEmpty) {
@@ -112,6 +145,7 @@ class GroupsCubit extends Cubit<GroupsState> {
               await _ratesInto(target, groups.map((g) => g.currency));
           if (isClosed) return;
           emit(_assemble(slices, now, toTarget));
+          _housekeeping(groups);
         } catch (e) {
           if (!isClosed) emit(GroupsError(e.toString()));
         }

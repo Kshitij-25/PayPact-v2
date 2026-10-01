@@ -22,7 +22,8 @@
       <li><strong>Account details</strong> — your name and email address (from email sign-up, Google or Apple), and the profile photo you choose to add.</li>
       <li><strong>Payment details you add</strong> — your UPI ID, if you enter one, so friends can pay you. We never receive card numbers, bank passwords or UPI PINs; payments happen in your own UPI or banking app.</li>
       <li><strong>Group content</strong> — groups you create or join, their members' names, expenses (title, amount, date, category, who paid, who owes what), notes, comments, receipt photos, cover photos, settle-up records and recurring-expense templates.</li>
-      <li><strong>Notifications</strong> — your notification preferences and, if you allow notifications, a device token used to deliver them.</li>
+      <li><strong>Searchable profile</strong> — so friends can add you to a group, other signed-in users can find you by the start of your name, and by your exact email address (matched through a one-way hash; your address itself is not exposed). They see your name, photo and a masked email such as k••••@gmail.com.</li>
+      <li><strong>Notifications</strong> — your notification preferences and the notifications addressed to you (kept in your inbox until you delete your account). Device notifications are generated on your device from that inbox; no device token is collected.</li>
       <li><strong>Diagnostics</strong> — crash reports (on by default, can be switched off in Settings → Privacy) and usage analytics (<em>off</em> unless you switch them on). Neither includes the contents of your groups or expenses.</li>
     </ul>
 
@@ -39,7 +40,7 @@
     Your UPI ID is visible to people you settle up with.</p>
 
     <h2>Services we rely on</h2>
-    <p>PayPact runs on Google Firebase (authentication, database, file storage, cloud functions, push messaging, and — only if enabled — analytics and crash reporting).
+    <p>PayPact runs on Google Firebase (authentication, database, hosting, and — only if enabled — analytics and crash reporting). Photos you add (profile, group cover, receipts) are stored in the database alongside the rest of your data.
     Receipt scanning happens on your device; the photo is uploaded only if you attach it to an expense.
     When an expense is entered in a foreign currency, the currency codes (never amounts or names) are sent to a public exchange-rate service to fetch the rate.</p>
 

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:paypact/core/utils/invite_code.dart';
 import 'package:paypact/features/group/data/models/group_model.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
+import 'package:paypact/features/group/domain/group_summary.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 
 class FirestoreGroupRepository implements GroupRepository {
@@ -58,7 +59,20 @@ class FirestoreGroupRepository implements GroupRepository {
       inviteCode: generateInviteCode(),
       createdAt: DateTime.now(),
     );
-    final ref = await _firestore.collection('groups').add(model.toMap());
+    final ref = _firestore.collection('groups').doc();
+    // A brand-new group starts with an (empty) summary, so its balances are
+    // maintained from the first expense on.
+    final batch = _firestore.batch()
+      ..set(ref, {
+        ...model.toMap(),
+        'balances': {createdByUid: 0},
+        'totalSpentMinor': 0,
+        'expenseCount': 0,
+        'summaryVersion': kSummaryVersion,
+      })
+      ..set(_invite(model.inviteCode!),
+          _inviteData(ref.id, name: name, emoji: emoji));
+    await batch.commit();
     final doc = await ref.get();
     return GroupModel.fromFirestore(doc);
   }
@@ -122,20 +136,41 @@ class FirestoreGroupRepository implements GroupRepository {
         ],
       });
 
+  DocumentReference<Map<String, dynamic>> _invite(String code) =>
+      _firestore.collection('invites').doc(code);
+
+  /// The public side of an invite: just enough to preview the group.
+  Map<String, dynamic> _inviteData(String groupId,
+          {required String name, required String emoji}) =>
+      {'groupId': groupId, 'name': name, 'emoji': emoji};
+
   @override
   Future<String> ensureInviteCode(String groupId) async {
     final ref = _firestore.collection('groups').doc(groupId);
-    final existing = (await ref.get()).data()?['inviteCode'] as String?;
-    if (existing != null && existing.isNotEmpty) return existing;
-    return resetInviteCode(groupId);
+    final data = (await ref.get()).data() ?? {};
+    final existing = data['inviteCode'] as String?;
+    if (existing == null || existing.isEmpty) return resetInviteCode(groupId);
+    // Groups from before invites were published get their entry now (and an
+    // admin re-publishing an existing one is harmless).
+    await _invite(existing).set(_inviteData(groupId,
+        name: data['name'] as String? ?? '',
+        emoji: data['emoji'] as String? ?? '✨'));
+    return existing;
   }
 
   @override
   Future<String> resetInviteCode(String groupId) async {
+    final ref = _firestore.collection('groups').doc(groupId);
+    final data = (await ref.get()).data() ?? {};
+    final old = data['inviteCode'] as String?;
     final code = generateInviteCode();
-    await _firestore.collection('groups').doc(groupId).update({
-      'inviteCode': code,
-    });
+    final batch = _firestore.batch()
+      ..update(ref, {'inviteCode': code})
+      ..set(_invite(code), _inviteData(groupId,
+          name: data['name'] as String? ?? '',
+          emoji: data['emoji'] as String? ?? '✨'));
+    if (old != null && old.isNotEmpty) batch.delete(_invite(old));
+    await batch.commit();
     return code;
   }
 
@@ -146,13 +181,67 @@ class FirestoreGroupRepository implements GroupRepository {
     if (name != null) updates['name'] = name;
     if (emoji != null) updates['emoji'] = emoji;
     if (category != null) updates['category'] = category;
-    if (updates.isNotEmpty) {
-      await _firestore.collection('groups').doc(groupId).update(updates);
+    if (updates.isEmpty) return;
+    final ref = _firestore.collection('groups').doc(groupId);
+    String? code;
+    if (name != null || emoji != null) {
+      code = (await ref.get()).data()?['inviteCode'] as String?;
     }
+    final batch = _firestore.batch()..update(ref, updates);
+    // Keep the invite preview in step with the group's name and emoji.
+    if (code != null && code.isNotEmpty) {
+      batch.set(
+          _invite(code),
+          {
+            if (name != null) 'name': name,
+            if (emoji != null) 'emoji': emoji,
+          },
+          SetOptions(merge: true));
+    }
+    await batch.commit();
   }
 
   @override
   Future<void> deleteGroup(String groupId) async {
-    await _firestore.collection('groups').doc(groupId).delete();
+    final ref = _firestore.collection('groups').doc(groupId);
+    final snap = await ref.get();
+    if (!snap.exists) return;
+    final code = snap.data()?['inviteCode'] as String?;
+
+    // No Cloud Function to clean up afterwards, so empty the group first.
+    // Marking it `deleting` is what lets the rules accept removing the ledger
+    // (settlements are otherwise immutable); the mark can't be taken back.
+    await ref.update({'deleting': true});
+    for (final name in const [
+      'expenses',
+      'settlements',
+      'recurring',
+      'photos',
+    ]) {
+      await _deleteCollection(ref.collection(name),
+          nested: name == 'expenses' ? const ['comments', 'history'] : const []);
+    }
+    final batch = _firestore.batch()..delete(ref);
+    if (code != null && code.isNotEmpty) batch.delete(_invite(code));
+    await batch.commit();
+  }
+
+  /// Deletes every document of [col] (and the [nested] sub-collections of each).
+  Future<void> _deleteCollection(CollectionReference<Map<String, dynamic>> col,
+      {List<String> nested = const []}) async {
+    while (true) {
+      final snap = await col.limit(200).get();
+      if (snap.docs.isEmpty) return;
+      for (final doc in snap.docs) {
+        for (final sub in nested) {
+          await _deleteCollection(doc.reference.collection(sub));
+        }
+      }
+      final batch = _firestore.batch();
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
   }
 }

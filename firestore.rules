@@ -16,6 +16,27 @@ service cloud.firestore {
         request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
     }
 
+    // Admin of another document's group (used by sub-collections).
+    function isAdminOfGroup(groupId) {
+      let g = get(/databases/$(database)/documents/groups/$(groupId)).data;
+      return signedIn() && request.auth.uid in g.get('adminIds', [g.createdBy]);
+    }
+
+    // A group being deleted: its ledger may then be removed (it is otherwise
+    // immutable). The flag can only ever be switched on.
+    function groupDeleting(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)).data
+        .get('deleting', false) == true;
+    }
+
+    // Photos live in documents (there is no Cloud Storage on the free plan):
+    // one JPEG blob per document, kept well under the 1 MiB document limit.
+    function isPhoto() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['data', 'size', 'updatedAt']) &&
+        d.data is bytes && d.data.size() <= 716800;
+    }
+
     // ── Users ──────────────────────────────────────────────────────────────
     // Anything sensitive (push tokens) lives under `private/` where only the
     // owner can read it.
@@ -33,12 +54,59 @@ service cloud.firestore {
         allow read, write: if isSelf(userId);
       }
 
+      // Profile photo (`avatar`). Anyone signed in can see it; only the owner
+      // changes it.
+      match /photos/{photoId} {
+        allow get: if signedIn();
+        allow list: if isSelf(userId); // account deletion clears its own
+        allow create, update: if isSelf(userId) && isPhoto();
+        allow delete: if isSelf(userId);
+      }
+
       match /notifications/{notifId} {
         allow read, update, delete: if isSelf(userId);
         // Group events notify other people, but nobody may forge another
         // user as the sender.
         allow create: if signedIn() && request.resource.data.actorId == request.auth.uid;
       }
+    }
+
+    // ── People directory ───────────────────────────────────────────────────
+    // What people search can see: name, photo, a masked e-mail and a *hash* of
+    // the e-mail (so an exact address can be looked up, never read). Listing is
+    // allowed only in small pages.
+    match /directory/{userId} {
+      allow get: if signedIn();
+      allow list: if signedIn() && request.query.limit <= 20;
+      allow create, update: if isSelf(userId) &&
+        request.resource.data.keys().hasOnly(
+          ['name', 'nameLower', 'emailHash', 'emailMasked', 'photoUrl', 'updatedAt']) &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() <= 120;
+      allow delete: if isSelf(userId);
+    }
+
+    // ── Invite links ───────────────────────────────────────────────────────
+    // `invites/{code}` points a secret code at its group. The code is the
+    // secret, so a document can be fetched by id but never listed.
+    match /invites/{code} {
+      function groupAfter(gid) {
+        return getAfter(/databases/$(database)/documents/groups/$(gid)).data;
+      }
+      function adminAfter(gid) {
+        return request.auth.uid in groupAfter(gid).get('adminIds', [groupAfter(gid).createdBy]);
+      }
+
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() &&
+        request.resource.data.keys().hasOnly(['groupId', 'name', 'emoji']) &&
+        request.resource.data.groupId is string &&
+        adminAfter(request.resource.data.groupId);
+      allow update: if signedIn() &&
+        resource.data.groupId == request.resource.data.groupId &&
+        adminAfter(resource.data.groupId);
+      allow delete: if isAdminOfGroup(resource.data.groupId);
     }
 
     // ── Groups ─────────────────────────────────────────────────────────────
@@ -58,8 +126,9 @@ service cloud.firestore {
         return request.resource.data.diff(resource.data).affectedKeys();
       }
 
-      // Maintained by Cloud Functions only — a client could otherwise forge
-      // its group's balances.
+      // Running balances and totals. Whoever writes an expense or settlement
+      // updates these in the same batch (there are no Cloud Functions), so any
+      // member may touch them — members could always forge expenses anyway.
       function summaryKeys() {
         return ['balances', 'totalSpentMinor', 'expenseCount', 'lastActivityAt',
                 'lastExpenseTitle', 'summaryVersion'];
@@ -73,34 +142,62 @@ service cloud.firestore {
           !(request.auth.uid in request.resource.data.get('adminIds', []));
       }
 
-      allow read: if signedIn() && isMember(resource.data);
+      // A group that no longer exists reads as "not found" rather than an
+      // error (nothing is revealed: there is no data).
+      allow read: if signedIn() && (resource == null || isMember(resource.data));
+
+      // Someone arriving through an invite link: they add only themselves, and
+      // quote a code that points at this very group.
+      function isJoining() {
+        return signedIn() && !isMember(resource.data) &&
+          changedKeys().hasOnly(['memberIds', 'memberNames', 'joinCode', 'updatedAt']) &&
+          request.resource.data.memberIds.toSet() ==
+            resource.data.memberIds.toSet().union([request.auth.uid].toSet()) &&
+          request.resource.data.memberNames.diff(resource.data.memberNames)
+            .affectedKeys().hasOnly([request.auth.uid]) &&
+          request.resource.data.joinCode is string &&
+          get(/databases/$(database)/documents/invites/$(request.resource.data.joinCode))
+            .data.groupId == groupId;
+      }
 
       allow create: if signedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.memberIds == [request.auth.uid] &&
         request.resource.data.get('adminIds', [request.auth.uid]) == [request.auth.uid] &&
-        !request.resource.data.keys().hasAny(summaryKeys());
+        request.resource.data.get('totalSpentMinor', 0) == 0 &&
+        request.resource.data.get('expenseCount', 0) == 0;
 
       // Admins can change anything, but `adminIds` may only ever list current
-      // members (so a departed admin can't silently regain the role on rejoin).
-      allow update: if signedIn() && isMember(resource.data) && (
-        (isAdmin(resource.data) &&
-          !changedKeys().hasAny(summaryKeys()) &&
-          request.resource.data.get('adminIds', []).hasOnly(request.resource.data.memberIds)) ||
-        // Expense / settlement writes touch the group so listeners refresh.
-        changedKeys().hasOnly(['updatedAt']) ||
+      // members (so a departed admin can't silently regain the role on rejoin),
+      // and a group marked `deleting` stays that way.
+      allow update: if signedIn() && (
+        (isMember(resource.data) && isAdmin(resource.data) &&
+          request.resource.data.get('adminIds', []).hasOnly(request.resource.data.memberIds) &&
+          (!resource.data.get('deleting', false) ||
+            request.resource.data.get('deleting', false) == true)) ||
+        // Expense / settlement writes touch the group (so listeners refresh)
+        // and move the running balances.
+        (isMember(resource.data) &&
+          changedKeys().hasOnly(summaryKeys().concat(['updatedAt']))) ||
         // Any member can add people (members are only ever added, never removed).
-        (changedKeys().hasOnly(['memberIds', 'memberNames', 'updatedAt']) &&
+        (isMember(resource.data) &&
+          changedKeys().hasOnly(['memberIds', 'memberNames', 'updatedAt']) &&
           request.resource.data.memberIds.hasAll(resource.data.memberIds)) ||
-        isLeaving()
+        (isMember(resource.data) && isLeaving()) ||
+        isJoining()
       );
 
       allow delete: if signedIn() && isAdmin(resource.data);
 
       match /expenses/{expenseId} {
         allow read: if isMemberOf(groupId);
-        allow create: if isMemberOf(groupId) &&
-          request.resource.data.createdById == request.auth.uid;
+        // A recurring expense is created by whichever member opens the app
+        // first after it falls due, on behalf of the template's owner.
+        allow create: if isMemberOf(groupId) && (
+          request.resource.data.createdById == request.auth.uid ||
+          (request.resource.data.recurringId is string &&
+            get(/databases/$(database)/documents/groups/$(groupId)/recurring/$(request.resource.data.recurringId))
+              .data.createdById == request.resource.data.createdById));
         allow update: if isMemberOf(groupId) &&
           request.resource.data.createdById == resource.data.createdById;
         allow delete: if isMemberOf(groupId);
@@ -116,7 +213,7 @@ service cloud.firestore {
             request.resource.data.text.size() <= 1000;
           allow update: if false;
           allow delete: if isMemberOf(groupId) &&
-            resource.data.authorId == request.auth.uid;
+            (resource.data.authorId == request.auth.uid || groupDeleting(groupId));
         }
 
         // Append-only edit log.
@@ -124,11 +221,22 @@ service cloud.firestore {
           allow read: if isMemberOf(groupId);
           allow create: if isMemberOf(groupId) &&
             request.resource.data.by == request.auth.uid;
-          allow update, delete: if false;
+          allow update: if false;
+          allow delete: if isMemberOf(groupId) && groupDeleting(groupId);
         }
       }
 
-      // Recurring-expense templates; a daily job turns them into expenses.
+      // Receipts (any member) and the cover photo (admins), as photo documents.
+      match /photos/{photoId} {
+        allow read: if isMemberOf(groupId);
+        allow create, update: if isMemberOf(groupId) && isPhoto() &&
+          (photoId != 'cover' || isAdminOfGroup(groupId));
+        allow delete: if isMemberOf(groupId) &&
+          (photoId != 'cover' || isAdminOfGroup(groupId) || groupDeleting(groupId));
+      }
+
+      // Recurring-expense templates. Whoever opens the app after one falls due
+      // turns it into expenses and moves `nextRunAt` forward.
       match /recurring/{recurringId} {
         allow read: if isMemberOf(groupId);
         allow create: if isMemberOf(groupId) &&
@@ -144,7 +252,8 @@ service cloud.firestore {
         allow read: if isMemberOf(groupId);
         allow create: if isMemberOf(groupId) &&
           request.resource.data.createdById == request.auth.uid;
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if isMemberOf(groupId) && groupDeleting(groupId);
       }
     }
   }

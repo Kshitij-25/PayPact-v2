@@ -1,3 +1,4 @@
+import 'package:paypact/widgets/doc_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -246,10 +247,7 @@ class _GroupDetailBody extends StatelessWidget {
                     children: [
                       if (group.coverUrl != null) ...[
                         Positioned.fill(
-                          child: Image.network(group.coverUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const SizedBox.shrink()),
+                          child: DocImage(group.coverUrl!, fit: BoxFit.cover),
                         ),
                         Positioned.fill(
                           child: DecoratedBox(
@@ -1130,9 +1128,7 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
           children: [
             if (loaded.group.coverUrl != null) ...[
               Positioned.fill(
-                child: Image.network(loaded.group.coverUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                child: DocImage(loaded.group.coverUrl!, fit: BoxFit.cover),
               ),
               Positioned.fill(
                 child: DecoratedBox(

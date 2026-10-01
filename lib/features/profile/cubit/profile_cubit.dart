@@ -4,8 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:paypact/core/di/injection_container.dart';
-import 'package:paypact/core/services/storage_service.dart';
+import 'package:paypact/core/services/photo_store.dart';
 import 'package:paypact/core/utils/upi.dart';
+import 'package:paypact/features/auth/data/user_directory.dart';
 import 'package:paypact/features/auth/domain/entities/user_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 
@@ -49,6 +50,10 @@ class ProfileCubit extends Cubit<ProfileState> {
         _fbAuth.currentUser!.updateDisplayName(name),
         _firestore.collection('users').doc(uid).update({'name': name}),
       ]);
+      await UserDirectory.upsert(_firestore, uid,
+          name: name,
+          email: current.user.email,
+          photoUrl: current.user.photoUrl);
       final updated = UserEntity(
         id: uid,
         name: name,
@@ -91,22 +96,25 @@ class ProfileCubit extends Cubit<ProfileState> {
   Future<String?> updatePhoto(Uint8List? bytes) async {
     final current = state;
     if (current is! ProfileLoaded) return 'Profile not loaded yet.';
-    final storage = locator<StorageService>();
+    final photos = locator<PhotoStore>();
     try {
       final uid = current.user.id;
       String? url;
       if (bytes != null) {
-        url = await storage.uploadAvatar(uid, bytes);
+        url = await photos.saveAvatar(uid, bytes);
       } else {
-        await storage.deleteByUrl(current.user.photoUrl);
+        await photos.delete(current.user.photoUrl);
       }
       await Future.wait([
         _firestore.collection('users').doc(uid).set(
           {'photoUrl': url ?? FieldValue.delete()},
           SetOptions(merge: true),
         ),
-        _fbAuth.currentUser?.updatePhotoURL(url) ?? Future.value(),
       ]);
+      await UserDirectory.upsert(_firestore, uid,
+          name: current.user.name,
+          email: current.user.email,
+          photoUrl: url);
       emit(ProfileLoaded(
         user: _with(current.user, photoUrl: url, clearPhoto: url == null),
         groupCount: current.groupCount,

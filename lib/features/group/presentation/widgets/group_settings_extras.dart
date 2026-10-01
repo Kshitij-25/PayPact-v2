@@ -1,10 +1,12 @@
+import 'package:paypact/widgets/doc_image.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/services/photo_picker.dart';
-import 'package:paypact/core/services/storage_service.dart';
+import 'package:paypact/features/group/data/summary_service.dart';
+import 'package:paypact/core/services/photo_store.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -44,6 +46,26 @@ class GroupCustomiseSection extends StatefulWidget {
 
 class _GroupCustomiseSectionState extends State<GroupCustomiseSection> {
   bool _busy = false;
+  bool _recalculating = false;
+
+  /// Rebuilds the group's balances from every expense and payment. Balances
+  /// are kept up to date by whoever adds an expense; this is the repair if two
+  /// people ever edit the very same expense at the same instant.
+  Future<void> _recalculate() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _recalculating = true);
+    try {
+      await locator<SummaryService>().rebuild(widget.group.id);
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Balances recalculated.')));
+      widget.onChanged();
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text("Couldn't recalculate. Check your connection.")));
+    } finally {
+      if (mounted) setState(() => _recalculating = false);
+    }
+  }
 
   Future<void> _setCover() async {
     final group = widget.group;
@@ -55,10 +77,9 @@ class _GroupCustomiseSectionState extends State<GroupCustomiseSection> {
     try {
       final bytes = await locator<PhotoPicker>().pickBytes(source);
       if (bytes == null) return;
-      final storage = locator<StorageService>();
-      final url = await storage.uploadGroupCover(group.id, bytes);
+      // A group has one cover document, so saving replaces the old photo.
+      final url = await locator<PhotoStore>().saveGroupCover(group.id, bytes);
       await locator<GroupRepository>().setCoverUrl(group.id, url);
-      await storage.deleteByUrl(group.coverUrl);
       widget.onChanged();
     } catch (_) {
       messenger.showSnackBar(
@@ -73,7 +94,7 @@ class _GroupCustomiseSectionState extends State<GroupCustomiseSection> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await locator<GroupRepository>().setCoverUrl(group.id, null);
-      await locator<StorageService>().deleteByUrl(group.coverUrl);
+      await locator<PhotoStore>().delete(group.coverUrl);
       widget.onChanged();
     } catch (_) {
       messenger.showSnackBar(
@@ -105,8 +126,9 @@ class _GroupCustomiseSectionState extends State<GroupCustomiseSection> {
                     color: pt.surfaceAlt,
                     child: group.coverUrl == null
                         ? Icon(Icons.image_outlined, color: pt.ink3)
-                        : Image.network(group.coverUrl!, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
+                        : DocImage(group.coverUrl!,
+                            fit: BoxFit.cover,
+                            placeholder:
                                 Icon(Icons.image_outlined, color: pt.ink3)),
                   ),
                 ),
@@ -149,6 +171,32 @@ class _GroupCustomiseSectionState extends State<GroupCustomiseSection> {
                         : '${group.customCategories.length} custom',
                     style: PayPactTypography.bodySm.copyWith(color: pt.ink3)),
                 Icon(Icons.chevron_right_rounded, color: pt.ink3),
+              ]),
+            ),
+          ),
+          Divider(height: 1, color: pt.border, indent: 16),
+          InkWell(
+            onTap: _recalculating ? null : _recalculate,
+            borderRadius: PayPactRadius.lg,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(children: [
+                Icon(Icons.calculate_outlined, size: 20, color: pt.ink2),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text('Recalculate balances',
+                      style: PayPactTypography.bodyMd.copyWith(
+                          color: pt.ink, fontWeight: FontWeight.w500)),
+                ),
+                if (_recalculating)
+                  const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                else
+                  Text('Repair',
+                      style: PayPactTypography.bodySm.copyWith(
+                          color: pt.accent, fontWeight: FontWeight.w600)),
               ]),
             ),
           ),

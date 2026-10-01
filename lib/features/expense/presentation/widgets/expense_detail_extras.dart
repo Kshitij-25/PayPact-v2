@@ -1,3 +1,4 @@
+import 'package:paypact/widgets/doc_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
@@ -22,16 +23,13 @@ void showReceiptViewer(BuildContext context, String url) {
           child: InteractiveViewer(
             maxScale: 5,
             child: Center(
-              child: Image.network(
+              child: DocImage(
                 url,
                 fit: BoxFit.contain,
-                loadingBuilder: (_, child, progress) => progress == null
-                    ? child
-                    : const Center(child: CircularProgressIndicator()),
-                errorBuilder: (_, __, ___) => const Icon(
-                    Icons.broken_image_outlined,
-                    color: Colors.white54,
-                    size: 48),
+                placeholder:
+                    const Center(child: CircularProgressIndicator()),
+                error: const Icon(Icons.broken_image_outlined,
+                    color: Colors.white54, size: 48),
               ),
             ),
           ),

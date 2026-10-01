@@ -60,7 +60,7 @@ List<String> describeExpenseChanges(
 }
 
 /// The next occurrence after [from] (calendar-based, clamped for short months
-/// so Jan 31 → Feb 28). Mirrors functions/lib/recurring.js.
+/// so Jan 31 → Feb 28). 
 DateTime nextRecurrence(DateTime from, RecurrenceInterval interval) {
   if (interval == RecurrenceInterval.weekly) {
     return from.add(const Duration(days: 7));
@@ -71,4 +71,24 @@ DateTime nextRecurrence(DateTime from, RecurrenceInterval interval) {
   return DateTime(firstOfNext.year, firstOfNext.month,
       from.day < lastDay ? from.day : lastDay, from.hour, from.minute,
       from.second);
+}
+
+/// Never create more than a year of monthly backlog at once.
+const kMaxRecurringCatchUp = 12;
+
+/// Every occurrence due up to [now] starting at [nextRunAt], plus the date the
+/// template should run next. Mirrors the old server job.
+({List<DateTime> due, DateTime next}) dueOccurrences(
+    DateTime nextRunAt, RecurrenceInterval interval, DateTime now) {
+  final due = <DateTime>[];
+  var cursor = nextRunAt;
+  while (!cursor.isAfter(now) && due.length < kMaxRecurringCatchUp) {
+    due.add(cursor);
+    cursor = nextRecurrence(cursor, interval);
+  }
+  // Past the cap, skip the rest of the backlog rather than flood the group.
+  while (!cursor.isAfter(now)) {
+    cursor = nextRecurrence(cursor, interval);
+  }
+  return (due: due, next: cursor);
 }

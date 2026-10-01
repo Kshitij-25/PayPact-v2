@@ -3,7 +3,6 @@ import 'package:paypact/features/notification/domain/notification_routing.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
-import 'package:paypact/core/services/notification_service.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/spacing.dart';
@@ -26,7 +25,6 @@ class NotificationsScreen extends StatelessWidget {
     return BlocProvider(
       create: (_) => NotificationsCubit(
         locator<NotificationsRepository>(),
-        locator<NotificationService>(),
         authState.user.id,
       )..load(),
       child: const _NotificationsBody(),

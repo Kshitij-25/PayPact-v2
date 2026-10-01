@@ -97,9 +97,11 @@ class _Preview extends StatelessWidget {
         Text(preview.name,
             textAlign: TextAlign.center,
             style: PayPactTypography.displayLg.copyWith(color: pt.ink)),
-        const SizedBox(height: 8),
-        Text('$n member${n == 1 ? '' : 's'}',
-            style: PayPactTypography.bodyMd.copyWith(color: pt.ink2)),
+        if (n > 0) ...[
+          const SizedBox(height: 8),
+          Text('$n member${n == 1 ? '' : 's'}',
+              style: PayPactTypography.bodyMd.copyWith(color: pt.ink2)),
+        ],
         const SizedBox(height: 28),
         PayPactButton(
           onPressed: busy

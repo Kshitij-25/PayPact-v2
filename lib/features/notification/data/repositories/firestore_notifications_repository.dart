@@ -23,6 +23,17 @@ class FirestoreNotificationsRepository implements NotificationsRepository {
   }
 
   @override
+  Future<List<NotificationEntity>> fetchSince(String userId, DateTime since,
+      {int limit = 20}) async {
+    final snap = await _notifRef(userId)
+        .where('createdAt', isGreaterThan: Timestamp.fromDate(since))
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs.map((d) => NotificationModel.fromFirestore(d)).toList();
+  }
+
+  @override
   Future<void> markRead(String userId, String notifId) async {
     await _notifRef(userId).doc(notifId).update({'isRead': true});
   }

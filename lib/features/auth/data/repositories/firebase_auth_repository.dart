@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:paypact/features/auth/data/models/user_model.dart';
+import 'package:paypact/features/auth/data/user_directory.dart';
 import 'package:paypact/features/auth/domain/entities/user_entity.dart';
 import 'package:paypact/features/auth/domain/repositories/auth_repository.dart';
 
@@ -29,7 +30,12 @@ class FirebaseAuthRepository implements AuthRepository {
                     SetOptions(merge: true))
                 .catchError((_) {});
           }
-          return UserModel.fromFirestore(doc);
+          final user = UserModel.fromFirestore(doc);
+          // Keep the public directory entry (people search) current; accounts
+          // from before it existed get one the next time they open the app.
+          UserDirectory.upsert(_firestore, user.id,
+              name: user.name, email: user.email, photoUrl: user.photoUrl);
+          return user;
         }
         return UserModel(
           id: fbUser.uid,
@@ -83,8 +89,12 @@ class FirebaseAuthRepository implements AuthRepository {
       photoUrl: fbUser.photoURL,
     );
     await docRef.set(model.toMap());
+    await _publish(model);
     return model;
   }
+
+  Future<void> _publish(UserEntity u) => UserDirectory.upsert(_firestore, u.id,
+      name: u.name, email: u.email, photoUrl: u.photoUrl);
 
   @override
   Future<UserEntity> createUserWithEmailAndPassword(
@@ -101,6 +111,7 @@ class FirebaseAuthRepository implements AuthRepository {
       photoUrl: null,
     );
     await _firestore.collection('users').doc(fbUser.uid).set(model.toMap());
+    await _publish(model);
     // Best-effort: failing to send the email must not fail sign-up.
     try {
       await fbUser.sendEmailVerification();
@@ -143,6 +154,7 @@ class FirebaseAuthRepository implements AuthRepository {
     if (!doc.exists) {
       await docRef.set(model.toMap());
     }
+    await _publish(model);
     return model;
   }
 
@@ -165,6 +177,7 @@ class FirebaseAuthRepository implements AuthRepository {
     final model = UserModel(
         id: fbUser.uid, name: name, email: email, photoUrl: fbUser.photoURL);
     if (!(await docRef.get()).exists) await docRef.set(model.toMap());
+    await _publish(model);
     return model;
   }
 
@@ -194,7 +207,12 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<void> signOut() async {
     await Future.wait([
       _auth.signOut(),
-      GoogleSignIn.instance.signOut(),
+      // A session that never used Google sign-in has nothing to sign out of,
+      // and this call can wait forever in that case.
+      GoogleSignIn.instance
+          .signOut()
+          .timeout(const Duration(seconds: 3))
+          .catchError((_) {}),
     ]);
   }
 }

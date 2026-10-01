@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:paypact/core/di/injection_container.dart';
-import 'package:paypact/core/services/storage_service.dart';
+import 'package:paypact/core/services/photo_store.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 
@@ -36,13 +36,13 @@ class CreateGroupCubit extends Cubit<CreateGroupState> {
         createdByUid: userId,
         createdByName: userName,
       );
-      // The cover needs the group to exist (uploads are members-only), so it
+      // The cover needs the group to exist (photos are members-only), so it
       // goes up afterwards; failing to upload mustn't lose the new group.
       var coverFailed = false;
       if (coverBytes != null) {
         try {
           final url =
-              await locator<StorageService>().uploadGroupCover(group.id, coverBytes);
+              await locator<PhotoStore>().saveGroupCover(group.id, coverBytes);
           await _repo.setCoverUrl(group.id, url);
         } catch (_) {
           coverFailed = true;

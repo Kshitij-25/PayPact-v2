@@ -1,3 +1,4 @@
+import 'package:paypact/widgets/doc_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -298,11 +299,10 @@ class _ExpenseDetailBody extends StatelessWidget {
                                   child: SizedBox(
                                     width: 56,
                                     height: 56,
-                                    child: Image.network(expense.receiptUrl!,
+                                    child: DocImage(expense.receiptUrl!,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) =>
-                                            const Icon(
-                                                Icons.receipt_long_outlined)),
+                                        placeholder: const Icon(
+                                            Icons.receipt_long_outlined)),
                                   ),
                                 ),
                                 const SizedBox(width: 14),

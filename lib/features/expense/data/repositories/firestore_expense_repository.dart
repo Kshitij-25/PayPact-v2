@@ -3,6 +3,7 @@ import 'package:paypact/features/expense/data/models/expense_model.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/entities/expense_extras.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/group/domain/group_summary.dart';
 import 'package:paypact/features/settle/data/settlement_model.dart';
 import 'package:paypact/features/settle/domain/settlement_entity.dart';
 
@@ -16,6 +17,31 @@ class FirestoreExpenseRepository implements ExpenseRepository {
 
   CollectionReference _settlementsRef(String groupId) =>
       _firestore.collection('groups').doc(groupId).collection('settlements');
+
+  DocumentReference _groupRef(String groupId) =>
+      _firestore.collection('groups').doc(groupId);
+
+  /// Reads a document from the local cache first (the screens on top of it keep
+  /// it fresh), falling back to the server — no billed read in the usual case.
+  Future<DocumentSnapshot> _cacheFirst(DocumentReference ref) async {
+    try {
+      final cached = await ref.get(const GetOptions(source: Source.cache));
+      if (cached.exists) return cached;
+    } catch (_) {}
+    return ref.get();
+  }
+
+  /// Whether this group's summary is maintained. Groups without one are
+  /// rebuilt from scratch by [SummaryService]; applying deltas to them would
+  /// be overwritten (or double counted) by that rebuild.
+  Future<bool> _hasSummary(String groupId) async {
+    try {
+      return groupHasSummary(
+          (await _cacheFirst(_groupRef(groupId))).data() as Map<String, dynamic>?);
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   Stream<List<ExpenseEntity>> watchGroupExpenses(String groupId, {int? limit}) {
@@ -82,12 +108,17 @@ class FirestoreExpenseRepository implements ExpenseRepository {
       note: _clean(note),
       receiptUrl: receiptUrl,
     );
-    final ref = await _expensesRef(groupId).add(model.toMap());
-    // Touch the group document so watchUserGroups fires and home balances refresh
-    await _firestore
-        .collection('groups')
-        .doc(groupId)
-        .update({'updatedAt': FieldValue.serverTimestamp()});
+    final ref = _expensesRef(groupId).doc();
+    final withSummary = await _hasSummary(groupId);
+    // The expense and its effect on the group's balances land together.
+    final batch = _firestore.batch()
+      ..set(ref, model.toMap())
+      ..update(_groupRef(groupId), {
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (withSummary)
+          ...summaryUpdate(expenseDelta(null, model), title: title),
+      });
+    await batch.commit();
     final doc = await ref.get();
     return ExpenseModel.fromFirestore(doc, groupId);
   }
@@ -127,12 +158,18 @@ class FirestoreExpenseRepository implements ExpenseRepository {
       note: _clean(note),
       receiptUrl: receiptUrl,
     );
-    await _expensesRef(groupId).doc(expenseId).update(model.toUpdateMap());
-    // Touch the group document so watchUserGroups fires and balances refresh
-    await _firestore
-        .collection('groups')
-        .doc(groupId)
-        .update({'updatedAt': FieldValue.serverTimestamp()});
+    final expenseRef = _expensesRef(groupId).doc(expenseId);
+    final before = await _cacheFirst(expenseRef);
+    final old = before.exists ? ExpenseModel.fromFirestore(before, groupId) : null;
+    final withSummary = old != null && await _hasSummary(groupId);
+    final batch = _firestore.batch()
+      ..update(expenseRef, model.toUpdateMap())
+      ..update(_groupRef(groupId), {
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (withSummary)
+          ...summaryUpdate(expenseDelta(old, model), title: title),
+      });
+    await batch.commit();
   }
 
   static String? _clean(String? s) {
@@ -165,7 +202,14 @@ class FirestoreExpenseRepository implements ExpenseRepository {
       recurringId: e.recurringId,
     ).toMap();
     map['createdAt'] = Timestamp.fromDate(e.createdAt);
-    await _expensesRef(e.groupId).doc(e.id).set(map);
+    final withSummary = await _hasSummary(e.groupId);
+    final batch = _firestore.batch()
+      ..set(_expensesRef(e.groupId).doc(e.id), map)
+      ..update(_groupRef(e.groupId), {
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (withSummary) ...summaryUpdate(expenseDelta(null, e)),
+      });
+    await batch.commit();
   }
 
   // ── Discussion & history ────────────────────────────────────────────────
@@ -246,41 +290,45 @@ class FirestoreExpenseRepository implements ExpenseRepository {
 
   @override
   Stream<List<RecurringExpense>> watchRecurring(String groupId) =>
-      _recurring(groupId).snapshots().map((snap) => snap.docs.map((d) {
-            final m = d.data() as Map<String, dynamic>;
-            return RecurringExpense(
-              id: d.id,
-              groupId: groupId,
-              title: m['title'] as String? ?? '',
-              amount: (m['amount'] as num?)?.toDouble() ?? 0,
-              originalAmount: (m['originalAmount'] as num?)?.toDouble() ??
-                  (m['amount'] as num?)?.toDouble() ??
-                  0,
-              originalCurrency: m['originalCurrency'] as String? ?? 'INR',
-              exchangeRate: (m['exchangeRate'] as num?)?.toDouble() ?? 1,
-              category: m['category'] as String? ?? 'other',
-              paidById: m['paidById'] as String? ?? '',
-              paidByName: m['paidByName'] as String? ?? '',
-              splits: [
-                for (final s in (m['splits'] as List? ?? []))
-                  ExpenseSplitEntity(
-                    userId: (s as Map)['userId'] as String,
-                    userName: s['userName'] as String? ?? '',
-                    amount: (s['amount'] as num).toDouble(),
-                  ),
-              ],
-              interval: m['interval'] == 'weekly'
-                  ? RecurrenceInterval.weekly
-                  : RecurrenceInterval.monthly,
-              nextRunAt:
-                  (m['nextRunAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-              active: m['active'] as bool? ?? true,
-              createdById: m['createdById'] as String? ?? '',
-              createdByName: m['createdByName'] as String? ?? '',
-              note: m['note'] as String?,
-            );
-          }).toList()
-            ..sort((a, b) => a.nextRunAt.compareTo(b.nextRunAt)));
+      _recurring(groupId).snapshots().map((snap) => snap.docs
+          .map((d) => recurringFromMap(
+              d.id, groupId, d.data() as Map<String, dynamic>))
+          .toList()
+        ..sort((a, b) => a.nextRunAt.compareTo(b.nextRunAt)));
+
+  static RecurringExpense recurringFromMap(
+      String id, String groupId, Map<String, dynamic> m) {
+    return RecurringExpense(
+      id: id,
+      groupId: groupId,
+      title: m['title'] as String? ?? '',
+      amount: (m['amount'] as num?)?.toDouble() ?? 0,
+      originalAmount: (m['originalAmount'] as num?)?.toDouble() ??
+          (m['amount'] as num?)?.toDouble() ??
+          0,
+      originalCurrency: m['originalCurrency'] as String? ?? 'INR',
+      exchangeRate: (m['exchangeRate'] as num?)?.toDouble() ?? 1,
+      category: m['category'] as String? ?? 'other',
+      paidById: m['paidById'] as String? ?? '',
+      paidByName: m['paidByName'] as String? ?? '',
+      splits: [
+        for (final s in (m['splits'] as List? ?? []))
+          ExpenseSplitEntity(
+            userId: (s as Map)['userId'] as String,
+            userName: s['userName'] as String? ?? '',
+            amount: (s['amount'] as num).toDouble(),
+          ),
+      ],
+      interval: m['interval'] == 'weekly'
+          ? RecurrenceInterval.weekly
+          : RecurrenceInterval.monthly,
+      nextRunAt: (m['nextRunAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      active: m['active'] as bool? ?? true,
+      createdById: m['createdById'] as String? ?? '',
+      createdByName: m['createdByName'] as String? ?? '',
+      note: m['note'] as String?,
+    );
+  }
 
   @override
   Future<void> createRecurring(RecurringExpense t) async {
@@ -318,7 +366,18 @@ class FirestoreExpenseRepository implements ExpenseRepository {
 
   @override
   Future<void> deleteExpense(String groupId, String expenseId) async {
-    await _expensesRef(groupId).doc(expenseId).delete();
+    final expenseRef = _expensesRef(groupId).doc(expenseId);
+    final before = await _cacheFirst(expenseRef);
+    if (!before.exists) return;
+    final old = ExpenseModel.fromFirestore(before, groupId);
+    final withSummary = await _hasSummary(groupId);
+    final batch = _firestore.batch()
+      ..delete(expenseRef)
+      ..update(_groupRef(groupId), {
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (withSummary) ...summaryUpdate(expenseDelta(old, null)),
+      });
+    await batch.commit();
   }
 
   @override
@@ -374,9 +433,19 @@ class FirestoreExpenseRepository implements ExpenseRepository {
         // Already recorded under this key — return it unchanged (no double pay).
         return SettlementModel.fromFirestore(existing, groupId);
       }
+      final group = await txn.get(groupRef);
+      final withSummary = groupHasSummary(group.data());
       txn.set(settlementRef, model.toMap());
-      // Touch group so watchUserGroups fires and home balances refresh.
-      txn.update(groupRef, {'updatedAt': FieldValue.serverTimestamp()});
+      // Touch the group (so listeners refresh) and move the balances.
+      txn.update(groupRef, {
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (withSummary)
+          ...summaryUpdate(settlementDelta({
+            'fromUserId': fromUserId,
+            'toUserId': toUserId,
+            'amountPaise': amountPaise,
+          })),
+      });
       return model;
     });
   }

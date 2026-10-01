@@ -1,3 +1,4 @@
+import 'package:paypact/widgets/doc_image.dart';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -8,7 +9,7 @@ import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/core/services/photo_picker.dart';
 import 'package:paypact/core/services/receipt_scanner.dart';
-import 'package:paypact/core/services/storage_service.dart';
+import 'package:paypact/core/services/photo_store.dart';
 import 'package:paypact/core/utils/default_currency.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
@@ -519,9 +520,9 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                     height: 52,
                     child: _receiptBytes != null
                         ? Image.memory(_receiptBytes!, fit: BoxFit.cover)
-                        : Image.network(_receiptUrl!,
+                        : DocImage(_receiptUrl!,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
+                            placeholder:
                                 const Icon(Icons.receipt_long_outlined)),
                   ),
                 ),
@@ -642,7 +643,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     return BlocConsumer<AddExpenseCubit, AddExpenseState>(
       listener: (context, state) {
         if (state is AddExpenseSuccess) {
-          locator<StorageService>().deleteByUrl(_staleReceiptUrl);
+          locator<PhotoStore>().delete(_staleReceiptUrl);
           context.pop();
         } else if (state is AddExpenseError) {
           ScaffoldMessenger.of(context)
@@ -1116,12 +1117,12 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
       setState(() => _uploading = true);
       try {
         receiptUrl =
-            await locator<StorageService>().uploadReceipt(gid, _receiptBytes!);
+            await locator<PhotoStore>().saveReceipt(gid, _receiptBytes!);
       } catch (_) {
         if (mounted) {
           setState(() => _uploading = false);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text("Couldn't upload the receipt. Check your connection and try again.")));
+              content: Text("Couldn't save the receipt. Check your connection and try again.")));
         }
         return;
       }

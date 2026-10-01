@@ -1,11 +1,9 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -14,6 +12,8 @@ import 'package:paypact/l10n/app_localizations.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/app_router.dart';
 import 'package:paypact/core/services/app_lock_service.dart';
+import 'package:paypact/core/services/background_inbox.dart';
+import 'package:paypact/core/services/inbox_watcher.dart';
 import 'package:paypact/core/services/notification_service.dart';
 import 'package:paypact/core/services/telemetry_service.dart';
 import 'package:paypact/features/notification/domain/notification_routing.dart';
@@ -42,8 +42,6 @@ const _recaptchaSiteKey = String.fromEnvironment('RECAPTCHA_SITE_KEY');
 Future<void> _connectEmulators() async {
   await FirebaseAuth.instance.useAuthEmulator(_emulatorHost, 9099);
   FirebaseFirestore.instance.useFirestoreEmulator(_emulatorHost, 8080);
-  FirebaseFunctions.instance.useFunctionsEmulator(_emulatorHost, 5001);
-  await FirebaseStorage.instance.useStorageEmulator(_emulatorHost, 9199);
 }
 
 /// App Check proves requests come from the genuine app. Debug providers are
@@ -91,11 +89,20 @@ void main() async {
 
   final authCubit = locator<AuthCubit>();
   authCubit.init();
-  authCubit.stream.listen((state) {
+  // Device notifications come from the person's live Firestore inbox.
+  void syncInbox(AuthState state) {
+    final watcher = locator<InboxWatcher>();
     if (state is AuthAuthenticated) {
-      locator<NotificationService>().saveToken(state.user.id);
+      watcher.start(state.user.id);
+      unawaited(BackgroundInbox.schedule());
+    } else {
+      watcher.stop();
+      unawaited(BackgroundInbox.cancel());
     }
-  });
+  }
+
+  authCubit.stream.listen(syncInbox);
+  syncInbox(authCubit.state);
 
   // Tapping a notification opens what it's about.
   locator<NotificationService>().onOpen = (data) {
@@ -108,9 +115,8 @@ void main() async {
 
   runApp(const PaypactApp());
 
-  // Set up push notifications after the app is running. Kept off the startup
-  // await-chain so a failure (e.g. mobile browsers without web-push support)
-  // can never block the UI from rendering.
+  // Set up notifications after the app is running. Kept off the startup
+  // await-chain so a failure can never block the UI from rendering.
   unawaited(locator<NotificationService>().initialize());
 }
 

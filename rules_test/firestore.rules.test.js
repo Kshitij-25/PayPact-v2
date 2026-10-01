@@ -20,9 +20,6 @@ before(async () => {
     firestore: {
       rules: fs.readFileSync(path.join(__dirname, "..", "firestore.rules"), "utf8"),
     },
-    storage: {
-      rules: fs.readFileSync(path.join(__dirname, "..", "storage.rules"), "utf8"),
-    },
   });
 });
 after(async () => env.cleanup());
