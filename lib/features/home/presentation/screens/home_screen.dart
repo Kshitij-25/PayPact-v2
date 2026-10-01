@@ -264,7 +264,7 @@ class _MobileHomeBody extends StatelessWidget {
                     const Spacer(),
                     PpGlassIconButton(
                       icon: Icons.search_rounded,
-                      onTap: () {},
+                      onTap: () => context.push(AppRoutes.search),
                       badge: false,
                     ),
                     const SizedBox(width: 8),
@@ -403,10 +403,8 @@ class _MobileHomeBody extends StatelessWidget {
                   _RecentRow(
                     item: item,
                     relativeTime: relativeTime(item.createdAt),
-                    onTap: () => context.push(
-                      '/expense/${item.expenseId}',
-                      extra: {'groupId': item.groupId},
-                    ),
+                    onTap: () => context
+                        .push(AppRoutes.expense(item.expenseId, item.groupId)),
                   ),
                 const SizedBox(height: 16),
               ],
@@ -757,10 +755,9 @@ class _WebHomeBody extends StatelessWidget {
                             item: recentExpenses[i],
                             relativeTime:
                                 relativeTime(recentExpenses[i].createdAt),
-                            onTap: () => context.push(
-                              '/expense/${recentExpenses[i].expenseId}',
-                              extra: {'groupId': recentExpenses[i].groupId},
-                            ),
+                            onTap: () => context.push(AppRoutes.expense(
+                                recentExpenses[i].expenseId,
+                                recentExpenses[i].groupId)),
                           ),
                         ],
                       ],

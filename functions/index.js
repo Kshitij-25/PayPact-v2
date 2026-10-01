@@ -2,10 +2,13 @@
 
 const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
-const { computeNetBalances, buildDigest } = require("./lib/balances");
+const { FieldValue } = require("firebase-admin/firestore");
+const { classifyQuery, maskEmail } = require("./lib/userSearch");
+const { api } = require("./lib/jobs");
 
 admin.initializeApp();
 const db = admin.firestore();
+const jobs = api(admin);
 
 const INVITE_CODE_RE = /^[A-Z0-9]{6,16}$/;
 
@@ -112,9 +115,9 @@ exports.joinGroupByCode = functions.https.onCall(async (data, context) => {
     "New member";
 
   await doc.ref.update({
-    memberIds: admin.firestore.FieldValue.arrayUnion(uid),
+    memberIds: FieldValue.arrayUnion(uid),
     [`memberNames.${uid}`]: name,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   // Tell everyone already in the group (their pushes go out via the trigger).
@@ -129,7 +132,7 @@ exports.joinGroupByCode = functions.https.onCall(async (data, context) => {
       actorId: uid,
       actorName: name,
       isRead: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
   }
   await batch.commit();
@@ -141,90 +144,158 @@ exports.joinGroupByCode = functions.https.onCall(async (data, context) => {
 // Housekeeping
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The client deletes only the group document; clear its sub-collections. */
+/** The client deletes only the group document; clear its data and files. */
 exports.onGroupDeleted = functions.firestore
   .document("groups/{groupId}")
-  .onDelete(async (snap) => {
+  .onDelete(async (snap, context) => {
     await db.recursiveDelete(snap.ref);
+    try {
+      await admin.storage().bucket().deleteFiles({ prefix: `groups/${context.params.groupId}/` });
+    } catch (err) {
+      functions.logger.warn("Group file cleanup skipped", { error: err.message });
+    }
+    return null;
+  });
+
+/** Keeps `nameLower` (used for case-insensitive search) in step with `name`. */
+exports.onUserWritten = functions.firestore
+  .document("users/{userId}")
+  .onWrite(async (change) => {
+    if (!change.after.exists) return null;
+    const { name, nameLower } = change.after.data();
+    const want = typeof name === "string" ? name.trim().toLowerCase() : "";
+    if (want && want !== nameLower) await change.after.ref.update({ nameLower: want });
     return null;
   });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Weekly digest — Sundays 8 PM IST
+// Group summaries (balances & totals kept on the group document)
+// ─────────────────────────────────────────────────────────────────────────────
+
+exports.onGroupCreated = functions.firestore
+  .document("groups/{groupId}")
+  .onCreate((snap) => jobs.recomputeGroup(snap.ref));
+
+exports.onExpenseWritten = functions.firestore
+  .document("groups/{groupId}/expenses/{expenseId}")
+  .onWrite((change, context) =>
+    jobs.onExpenseWritten(
+      context.params.groupId,
+      context.eventId,
+      change.before.exists ? change.before.data() : null,
+      change.after.exists ? change.after.data() : null,
+      Date.parse(context.timestamp)
+    )
+  );
+
+exports.onSettlementCreated = functions.firestore
+  .document("groups/{groupId}/settlements/{settlementId}")
+  .onCreate((snap, context) =>
+    jobs.onSettlementCreated(
+      context.params.groupId,
+      context.eventId,
+      snap.data(),
+      Date.parse(context.timestamp)
+    )
+  );
+
+/** Backfill for groups that predate summaries; any member may request it. */
+exports.recomputeGroupSummary = functions.https.onCall(async (data, context) => {
+  const uid = requireAuth(context);
+  const groupId = String((data && data.groupId) || "");
+  const ref = db.doc(`groups/${groupId}`);
+  const snap = await ref.get();
+  if (!snap.exists || !(snap.data().memberIds || []).includes(uid)) {
+    throw new functions.https.HttpsError("permission-denied", "Not a member of this group.");
+  }
+  await jobs.recomputeGroup(ref);
+  return { ok: true };
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// People search — replaces client-side queries so the users collection can't
+// be enumerated, and so email addresses are never handed out in full.
+// ─────────────────────────────────────────────────────────────────────────────
+
+exports.searchUsers = functions.https.onCall(async (data, context) => {
+  const uid = requireAuth(context);
+  const { kind, q } = classifyQuery(data && data.query);
+  if (kind === "none") return { users: [] };
+  const exclude = new Set(((data && data.excludeIds) || []).map(String));
+  exclude.add(uid);
+
+  let docs;
+  if (kind === "email") {
+    docs = (await db.collection("users").where("email", "==", q).limit(5).get()).docs;
+  } else {
+    docs = (
+      await db
+        .collection("users")
+        .orderBy("nameLower")
+        .startAt(q)
+        .endAt(q + "\uf8ff")
+        .limit(10)
+        .get()
+    ).docs;
+  }
+  return {
+    users: docs
+      .filter((d) => !exclude.has(d.id))
+      .map((d) => ({
+        id: d.id,
+        name: d.data().name || "",
+        email: maskEmail(d.data().email || ""),
+        photoUrl: d.data().photoUrl || null,
+        // An exact email match is something the searcher already knew.
+        exactEmail: kind === "email",
+      })),
+  };
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Account deletion
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REAUTH_WINDOW_SECONDS = 5 * 60;
+
+exports.deleteAccount = functions.https.onCall(async (data, context) => {
+  const uid = requireAuth(context);
+  // Deleting an account is destructive: require a sign-in from the last few
+  // minutes (the app re-authenticates the user right before calling this).
+  const authTime = (context.auth.token && context.auth.token.auth_time) || 0;
+  if (Date.now() / 1000 - authTime > REAUTH_WINDOW_SECONDS) {
+    throw new functions.https.HttpsError("unauthenticated", "recent-login-required");
+  }
+  const result = await jobs.deleteAccount(uid);
+  if (!result.ok) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "unsettled-balances",
+      { blockers: result.blockers }
+    );
+  }
+  return result;
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scheduled jobs
 // ─────────────────────────────────────────────────────────────────────────────
 
 exports.weeklyDigest = functions.pubsub
   .schedule("0 20 * * 0")
   .timeZone("Asia/Kolkata")
   .onRun(async () => {
-    const weekAgo = admin.firestore.Timestamp.fromMillis(
-      Date.now() - 7 * 24 * 60 * 60 * 1000
-    );
-
-    // userId -> { groups:Set, expenseCount, net:{[currency]:minor} }
-    const perUser = new Map();
-    const bucket = (uid) => {
-      if (!perUser.has(uid)) {
-        perUser.set(uid, { groups: new Set(), expenseCount: 0, net: {} });
-      }
-      return perUser.get(uid);
-    };
-
-    const groups = await db.collection("groups").get();
-    for (const g of groups.docs) {
-      const data = g.data();
-      const memberIds = data.memberIds || [];
-      const currency = data.currency || "INR";
-      const [expSnap, setSnap] = await Promise.all([
-        g.ref.collection("expenses").get(),
-        g.ref.collection("settlements").get(),
-      ]);
-      const expenses = expSnap.docs.map((d) => d.data());
-      const net = computeNetBalances(
-        expenses,
-        setSnap.docs.map((d) => d.data()),
-        memberIds
-      );
-      const recent = expSnap.docs.filter((d) => {
-        const ts = d.data().createdAt;
-        return ts && ts.toMillis() >= weekAgo.toMillis();
-      }).length;
-
-      for (const uid of memberIds) {
-        const b = bucket(uid);
-        b.groups.add(g.id);
-        b.expenseCount += recent;
-        b.net[currency] = (b.net[currency] || 0) + (net[uid] || 0);
-      }
-    }
-
-    let sent = 0;
-    for (const [uid, b] of perUser) {
-      const userSnap = await db.doc(`users/${uid}`).get();
-      const prefs = (userSnap.exists && userSnap.data().notifPrefs) || {};
-      if (prefs.digest !== true) continue; // opt-in, matches the Settings default
-
-      const digest = buildDigest({
-        expenseCount: b.expenseCount,
-        groupCount: b.groups.size,
-        net: b.net,
-      });
-      if (!digest) continue;
-
-      // Writing the inbox document triggers the push via onNotificationCreated.
-      await db.collection(`users/${uid}/notifications`).add({
-        type: "digest",
-        title: digest.title,
-        body: digest.body,
-        groupId: null,
-        groupName: null,
-        actorId: "system",
-        actorName: "PayPact",
-        isRead: false,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      sent++;
-    }
+    const sent = await jobs.runDigest();
     functions.logger.info(`Weekly digest sent to ${sent} users`);
+    return null;
+  });
+
+exports.runRecurringExpenses = functions.pubsub
+  .schedule("0 3 * * *")
+  .timeZone("Asia/Kolkata")
+  .onRun(async () => {
+    const created = await jobs.runRecurring();
+    const cleaned = await jobs.cleanupEvents();
+    functions.logger.info(`Recurring: created ${created} expenses; cleaned ${cleaned} events`);
     return null;
   });

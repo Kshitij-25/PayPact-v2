@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:paypact/core/utils/csv.dart';
 import 'package:paypact/core/utils/default_currency.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
@@ -79,7 +80,7 @@ class InsightsCubit extends Cubit<InsightsState> {
       };
 
   int _bucketIndex(ExpenseEntity e, InsightsPeriod period) {
-    final date = e.createdAt;
+    final date = e.date;
     final now = DateTime.now();
     return switch (period) {
       InsightsPeriod.week => (date.weekday - 1).clamp(0, 6),
@@ -134,15 +135,62 @@ class InsightsCubit extends Cubit<InsightsState> {
 
   // ── Main load ─────────────────────────────────────────────────────────────────
 
+  InsightsPeriod _period = InsightsPeriod.month;
+
+  /// CSV of the expenses in the period currently shown, across all groups:
+  /// one row per expense with your share. For the Insights export button.
+  Future<String> exportCsv() async {
+    final (start, end) = _periodRange(_period);
+    final groups = await _groupRepo.watchUserGroups(_userId).first;
+    final rows = <List<Object?>>[
+      [
+        'Date', 'Group', 'Description', 'Category', 'Paid by', 'Total',
+        'Currency', 'Your share', 'Note',
+      ],
+    ];
+    final dated = <(DateTime, List<Object?>)>[];
+    for (final g in groups) {
+      final expenses = await _expenseRepo.getGroupExpenses(g.id, since: start);
+      for (final e in expenses) {
+        if (e.date.isBefore(start) || e.date.isAfter(end)) continue;
+        final custom =
+            g.customCategories.where((c) => c.id == e.category).firstOrNull;
+        dated.add((
+          e.date,
+          [
+            '${e.date.year}-${e.date.month.toString().padLeft(2, '0')}-${e.date.day.toString().padLeft(2, '0')}',
+            g.name,
+            e.title,
+            custom?.name ?? e.category,
+            e.paidByName,
+            e.amount,
+            g.currency,
+            e.splitAmountFor(_userId),
+            e.note ?? '',
+          ],
+        ));
+      }
+    }
+    dated.sort((a, b) => b.$1.compareTo(a.$1));
+    rows.addAll(dated.map((d) => d.$2));
+    return toCsv(rows);
+  }
+
   Future<void> loadInsights(InsightsPeriod period) async {
+    _period = period;
     emit(const InsightsLoading());
     try {
       final groups = await _groupRepo.watchUserGroups(_userId).first;
 
+      // Only the current and previous period are shown, so don't download
+      // anything older. (Entry time is never earlier than the spent-on date,
+      // so filtering on it can't drop an expense that belongs in the range.)
+      final since = _prevPeriodRange(period).$1;
       final results = await Future.wait(
         groups.map((g) async {
-          final expenses = await _expenseRepo.getGroupExpenses(g.id);
-          final settlements = await _expenseRepo.getGroupSettlements(g.id);
+          final expenses = await _expenseRepo.getGroupExpenses(g.id, since: since);
+          final settlements =
+              await _expenseRepo.getGroupSettlements(g.id, since: since);
           return (g, expenses, settlements);
         }),
       );
@@ -160,16 +208,21 @@ class InsightsCubit extends Cubit<InsightsState> {
       for (final (group, expenses, settlements) in results) {
         for (final e in expenses) {
           final inCurrent =
-              !e.createdAt.isBefore(currentStart) && !e.createdAt.isAfter(currentEnd);
+              !e.date.isBefore(currentStart) && !e.date.isAfter(currentEnd);
           final inPrev =
-              !e.createdAt.isBefore(prevStart) && !e.createdAt.isAfter(prevEnd);
+              !e.date.isBefore(prevStart) && !e.date.isAfter(prevEnd);
 
           if (inCurrent) {
             final myShare = e.splitAmountFor(_userId);
             yourShare += myShare;
             totalSpent += e.amount;
-            categoryTotals[e.category] =
-                (categoryTotals[e.category] ?? 0) + myShare;
+            // A group's own categories are reported by name ("custom:Rent"),
+            // so the same name in two groups adds up together.
+            final custom = group.customCategories
+                .where((c) => c.id == e.category)
+                .firstOrNull;
+            final key = custom != null ? 'custom:${custom.name}' : e.category;
+            categoryTotals[key] = (categoryTotals[key] ?? 0) + myShare;
             buckets[_bucketIndex(e, period)] += myShare;
           }
           if (inPrev) {
@@ -184,12 +237,12 @@ class InsightsCubit extends Cubit<InsightsState> {
                   split.userId,
                   () => _MemberData(
                     name: group.memberNames[split.userId] ?? 'Member',
-                    firstExpenseDate: e.createdAt,
+                    firstExpenseDate: e.date,
                   ),
                 );
                 md.totalOwed += split.amount;
-                if (e.createdAt.isBefore(md.firstExpenseDate)) {
-                  md.firstExpenseDate = e.createdAt;
+                if (e.date.isBefore(md.firstExpenseDate)) {
+                  md.firstExpenseDate = e.date;
                 }
               }
             }

@@ -19,6 +19,16 @@ class FirebaseAuthRepository implements AuthRepository {
       try {
         final doc = await _firestore.collection('users').doc(fbUser.uid).get();
         if (doc.exists) {
+          // People search is by lower-cased name; accounts created before that
+          // existed get it filled in the next time they open the app.
+          final data = doc.data() ?? {};
+          final name = data['name'];
+          if (name is String && name.isNotEmpty && data['nameLower'] == null) {
+            doc.reference
+                .set({'nameLower': name.trim().toLowerCase()},
+                    SetOptions(merge: true))
+                .catchError((_) {});
+          }
           return UserModel.fromFirestore(doc);
         }
         return UserModel(
@@ -133,6 +143,28 @@ class FirebaseAuthRepository implements AuthRepository {
     if (!doc.exists) {
       await docRef.set(model.toMap());
     }
+    return model;
+  }
+
+  @override
+  Future<UserEntity> signInWithApple() async {
+    final provider = fb.AppleAuthProvider()
+      ..addScope('email')
+      ..addScope('name');
+    final userCredential = kIsWeb
+        ? await _auth.signInWithPopup(provider)
+        : await _auth.signInWithProvider(provider);
+    final fbUser = userCredential.user!;
+
+    // Apple only reveals the name the first time, and may hide the email.
+    final email = fbUser.email ?? '';
+    final name = (fbUser.displayName?.trim().isNotEmpty ?? false)
+        ? fbUser.displayName!.trim()
+        : (email.contains('@') ? email.split('@').first : 'PayPact user');
+    final docRef = _firestore.collection('users').doc(fbUser.uid);
+    final model = UserModel(
+        id: fbUser.uid, name: name, email: email, photoUrl: fbUser.photoURL);
+    if (!(await docRef.get()).exists) await docRef.set(model.toMap());
     return model;
   }
 

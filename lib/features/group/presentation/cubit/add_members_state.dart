@@ -7,14 +7,6 @@ class UserResult {
 
   const UserResult({required this.id, required this.name, required this.email});
 
-  factory UserResult.fromDoc(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return UserResult(
-      id: doc.id,
-      name: (data['name'] as String?) ?? '',
-      email: (data['email'] as String?) ?? '',
-    );
-  }
 }
 
 abstract class AddMembersState {}

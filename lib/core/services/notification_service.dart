@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -21,6 +23,12 @@ class NotificationService {
 
   NotificationService(this._messaging, this._firestore);
 
+  /// Called when the user taps a notification, with its data payload
+  /// (`type`, `groupId`, …). The app sets this to navigate.
+  void Function(Map<String, dynamic> data)? onOpen;
+
+  void _open(Map<String, dynamic> data) => onOpen?.call(data);
+
   Future<void> initialize() async {
     try {
       if (kIsWeb) {
@@ -36,13 +44,19 @@ class NotificationService {
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       await _initLocalNotifications();
 
+      // Tapping a push (app in background) or launching the app from one.
+      FirebaseMessaging.onMessageOpenedApp.listen((m) => _open(m.data));
+      final initial = await _messaging.getInitialMessage();
+      if (initial != null) _open(initial.data);
+
       await _messaging.requestPermission(alert: true, badge: true, sound: true);
 
       // Show a local notification for foreground FCM messages (mobile only).
       FirebaseMessaging.onMessage.listen((message) {
         final n = message.notification;
         if (n != null) {
-          showLocalNotification(title: n.title ?? '', body: n.body ?? '');
+          showLocalNotification(
+              title: n.title ?? '', body: n.body ?? '', data: message.data);
         }
       });
     } catch (e) {
@@ -59,6 +73,14 @@ class NotificationService {
     );
     await _localNotif.initialize(
       settings: const InitializationSettings(android: android, iOS: ios),
+      // Tapping the banner shown for a push that arrived while the app was open.
+      onDidReceiveNotificationResponse: (response) {
+        final payload = response.payload;
+        if (payload == null || payload.isEmpty) return;
+        try {
+          _open(Map<String, dynamic>.from(jsonDecode(payload) as Map));
+        } catch (_) {}
+      },
     );
 
     final androidImpl = _localNotif
@@ -78,12 +100,14 @@ class NotificationService {
     required String title,
     required String body,
     int id = 0,
+    Map<String, dynamic>? data,
   }) async {
     if (kIsWeb) return;
     await _localNotif.show(
       id: id,
       title: title,
       body: body,
+      payload: data == null ? null : jsonEncode(data),
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _androidChannelId,

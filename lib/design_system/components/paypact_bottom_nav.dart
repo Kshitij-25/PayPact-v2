@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:paypact/l10n/l10n.dart';
 
 import '../theme/paypact_theme_extension.dart';
 
@@ -52,14 +53,14 @@ class PayPactBottomNav extends StatelessWidget {
                 _NavItem(
                   icon: Icons.home_outlined,
                   activeIcon: Icons.home_rounded,
-                  label: 'Home',
+                  label: context.l10n.navHome,
                   isActive: currentIndex == 0,
                   onTap: () => onTap(0),
                 ),
                 _NavItem(
                   icon: Icons.group_outlined,
                   activeIcon: Icons.group_rounded,
-                  label: 'Groups',
+                  label: context.l10n.navGroups,
                   isActive: currentIndex == 1,
                   onTap: () => onTap(1),
                 ),
@@ -68,14 +69,14 @@ class PayPactBottomNav extends StatelessWidget {
                 _NavItem(
                   icon: Icons.show_chart_rounded,
                   activeIcon: Icons.show_chart_rounded,
-                  label: 'Activity',
+                  label: context.l10n.navActivity,
                   isActive: currentIndex == 2,
                   onTap: () => onTap(2),
                 ),
                 _NavItem(
                   icon: Icons.person_outline_rounded,
                   activeIcon: Icons.person_rounded,
-                  label: 'You',
+                  label: context.l10n.navYou,
                   isActive: currentIndex == 3,
                   onTap: () => onTap(3),
                 ),

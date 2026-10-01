@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
+import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/group/data/summary_service.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/settle/domain/debt_simplifier.dart';
@@ -14,12 +16,18 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
   final String _groupId;
   final String _currentUserId;
 
+  /// Expenses shown per page; "load more" raises the live query's limit.
+  static const pageSize = 50;
+
   StreamSubscription<GroupEntity?>? _groupSub;
   StreamSubscription<List<ExpenseEntity>>? _expenseSub;
 
   GroupEntity? _latestGroup;
   List<ExpenseEntity> _latestExpenses = [];
   bool _expensesReady = false;
+  int _limit = pageSize;
+  // Groups that predate summaries need the whole history for balances.
+  bool _watchingAll = false;
 
   GroupDetailCubit(
       this._groupRepo, this._expenseRepo, this._groupId, this._currentUserId)
@@ -34,13 +42,33 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
           emit(GroupDetailError('Group not found'));
           return;
         }
+        final first = _latestGroup == null;
         _latestGroup = group;
+        if (first) {
+          _watchExpenses(all: !group.hasSummary);
+          if (!group.hasSummary) _ensureSummary();
+        } else if (group.hasSummary && _watchingAll) {
+          // The backend finished building the summary: stop reading everything.
+          _watchExpenses(all: false);
+        }
         if (_expensesReady) _emitLoaded();
       },
       onError: (e) => emit(GroupDetailError(e.toString())),
     );
+  }
 
-    _expenseSub = _expenseRepo.watchGroupExpenses(_groupId).listen(
+  void _ensureSummary() {
+    try {
+      locator<SummaryService>().ensure(_groupId);
+    } catch (_) {}
+  }
+
+  void _watchExpenses({required bool all}) {
+    _expenseSub?.cancel();
+    _watchingAll = all;
+    _expenseSub = _expenseRepo
+        .watchGroupExpenses(_groupId, limit: all ? null : _limit)
+        .listen(
       (expenses) {
         _latestExpenses = expenses;
         _expensesReady = true;
@@ -50,25 +78,72 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
     );
   }
 
+  /// Shows the next page of older expenses.
+  void loadMore() {
+    final group = _latestGroup;
+    if (group == null || _watchingAll || !canLoadMore) return;
+    _limit += pageSize;
+    _watchExpenses(all: false);
+  }
+
+  /// More expenses exist beyond what's loaded (the last page came back full).
+  bool get canLoadMore => !_watchingAll && _latestExpenses.length >= _limit;
+
   Future<void> _emitLoaded() async {
     final group = _latestGroup;
     if (group == null) return;
 
-    final settlements = await _expenseRepo.getGroupSettlements(_groupId);
-    final netBalance = _myBalance(_latestExpenses, settlements, _currentUserId);
-    final memberBalances =
-        _memberBalances(_latestExpenses, settlements, group);
-    final globalBalances =
-        _globalMemberBalances(_latestExpenses, settlements, group);
+    final settlements = _watchingAll
+        ? await _expenseRepo.getGroupSettlements(_groupId)
+        : await _expenseRepo.getGroupSettlements(_groupId, limit: 100);
+
+    // Newest *spent-on* date first (the query is ordered by entry time).
+    final expenses = List<ExpenseEntity>.of(_latestExpenses)
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    final Map<String, double> globalBalances;
+    final double netBalance;
+    final Map<String, double> memberBalances;
+    if (group.hasSummary) {
+      // Balances come from the server summary — correct however many expenses
+      // are currently loaded.
+      globalBalances = {
+        for (final id in group.memberIds) id: group.balanceOf(id) ?? 0,
+      };
+      netBalance = globalBalances[_currentUserId] ?? 0;
+      memberBalances = _planAgainstMe(group, globalBalances);
+    } else {
+      netBalance = _myBalance(expenses, settlements, _currentUserId);
+      memberBalances = _memberBalances(expenses, settlements, group);
+      globalBalances = _globalMemberBalances(expenses, settlements, group);
+    }
 
     emit(GroupDetailLoaded(
       group: group,
-      expenses: _latestExpenses,
+      expenses: expenses,
       netBalance: netBalance,
       memberBalances: memberBalances,
       globalMemberBalances: globalBalances,
       settlements: settlements,
+      canLoadMore: canLoadMore,
     ));
+  }
+
+  /// Who owes me / whom I owe, per the minimised settle-up plan
+  /// (+ = they owe me, − = I owe them).
+  Map<String, double> _planAgainstMe(
+      GroupEntity group, Map<String, double> balances) {
+    final out = {
+      for (final id in group.memberIds)
+        if (id != _currentUserId) id: 0.0,
+    };
+    final debts = simplifyDebtsFromBalances(
+        balances, Map<String, String>.from(group.memberNames));
+    for (final d in debts) {
+      if (d.toUserId == _currentUserId) out[d.fromUserId] = d.amount;
+      if (d.fromUserId == _currentUserId) out[d.toUserId] = -d.amount;
+    }
+    return out;
   }
 
   double _myBalance(List<ExpenseEntity> expenses,

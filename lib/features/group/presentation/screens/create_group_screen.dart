@@ -1,9 +1,13 @@
+import 'dart:typed_data';
+
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/navigation/app_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/services/photo_picker.dart';
+import 'package:paypact/widgets/photo_source_sheet.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
@@ -41,6 +45,24 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
   String _selectedCategory = 'trip';
   String _selectedEmoji = '🏖';
   String _selectedCurrency = kDefaultCurrency;
+  Uint8List? _coverBytes;
+
+  Future<void> _pickCover() async {
+    final source = await choosePhotoSource(context,
+        allowRemove: _coverBytes != null,
+        onRemove: () => setState(() => _coverBytes = null));
+    if (source == null || !mounted) return;
+    try {
+      final bytes = await locator<PhotoPicker>()
+          .pickBytes(source, maxSide: 1600, quality: 80);
+      if (bytes != null && mounted) setState(() => _coverBytes = bytes);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Couldn't open the camera or photos.")));
+      }
+    }
+  }
 
   static const _categories = [
     _Cat('trip', 'Trip', '🏖'),
@@ -86,6 +108,11 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
     return BlocConsumer<CreateGroupCubit, CreateGroupState>(
       listener: (context, state) {
         if (state is CreateGroupSuccess) {
+          if (state.coverFailed) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text(
+                    "Group created, but the cover photo couldn't be uploaded. You can add it in group settings.")));
+          }
           context.pop();
           context.push(
             AppRoutes.addMembers,
@@ -317,6 +344,7 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
           currency: _selectedCurrency,
           userId: authState.user.id,
           userName: authState.user.name,
+          coverBytes: _coverBytes,
         );
   }
 
@@ -584,20 +612,23 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
               end: Alignment.bottomRight,
               colors: [pt.accentSoft, tones[0]],
             ),
+            image: _coverBytes == null
+                ? null
+                : DecorationImage(
+                    image: MemoryImage(_coverBytes!), fit: BoxFit.cover),
           ),
           child: Stack(
             children: [
-              Center(
-                child: Text(_selectedEmoji,
-                    style: const TextStyle(fontSize: 56)),
-              ),
+              if (_coverBytes == null)
+                Center(
+                  child: Text(_selectedEmoji,
+                      style: const TextStyle(fontSize: 56)),
+                ),
               Positioned(
                 bottom: 12,
                 right: 12,
                 child: GestureDetector(
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Cover photos — coming soon'))),
+                  onTap: _pickCover,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 7),
@@ -612,7 +643,7 @@ class _CreateGroupBodyState extends State<_CreateGroupBody> {
                         Icon(Icons.photo_camera_outlined,
                             size: 14, color: pt.ink2),
                         const SizedBox(width: 6),
-                        Text('Replace cover',
+                        Text(_coverBytes == null ? 'Add cover' : 'Replace cover',
                             style: PayPactTypography.bodySm.copyWith(
                                 color: pt.ink2,
                                 fontWeight: FontWeight.w600,

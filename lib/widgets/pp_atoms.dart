@@ -20,11 +20,15 @@ class PpAvatar extends StatelessWidget {
     required this.name,
     this.size = 36,
     this.border,
+    this.imageUrl,
   });
 
   final String name;
   final double size;
   final Color? border;
+
+  /// Profile photo; the initials are shown while it loads or if it fails.
+  final String? imageUrl;
 
   static const _palettes = <List<Color>>[
     [Color(0xFFEDD9CF), Color(0xFF7A3A24)], // clay
@@ -55,23 +59,41 @@ class PpAvatar extends StatelessWidget {
         .map((s) => s[0].toUpperCase())
         .join();
 
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: p[0],
-        shape: BoxShape.circle,
-        border: border == null ? null : Border.all(color: border!, width: 2),
+    final initialsText = Text(
+      initials,
+      style: PayPactTypography.headingMd.copyWith(
+        color: p[1],
+        fontSize: size * 0.38,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.02 * (size * 0.38),
       ),
-      alignment: Alignment.center,
-      child: Text(
-        initials,
-        style: PayPactTypography.headingMd.copyWith(
-          color: p[1],
-          fontSize: size * 0.38,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.02 * (size * 0.38),
+    );
+
+    return Semantics(
+      label: name,
+      image: true,
+      excludeSemantics: true,
+      child: Container(
+        width: size,
+        height: size,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: p[0],
+          shape: BoxShape.circle,
+          border: border == null ? null : Border.all(color: border!, width: 2),
         ),
+        alignment: Alignment.center,
+        child: imageUrl == null
+            ? initialsText
+            : Image.network(
+                imageUrl!,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => initialsText,
+                loadingBuilder: (_, child, progress) =>
+                    progress == null ? child : initialsText,
+              ),
       ),
     );
   }
@@ -195,15 +217,36 @@ class PpGlassIconButton extends StatelessWidget {
   const PpGlassIconButton({
     super.key,
     required this.icon,
-    this.size = 40,
+    this.size = 44,
     this.onTap,
     this.badge = false,
+    this.label,
   });
 
   final IconData icon;
   final double size;
   final VoidCallback? onTap;
   final bool badge;
+
+  /// Spoken label / tooltip. When omitted it's derived from the icon, so
+  /// icon-only buttons are never anonymous to a screen reader.
+  final String? label;
+
+  static final Map<IconData, String> _defaultLabels = {
+    Icons.arrow_back_rounded: 'Back',
+    Icons.search_rounded: 'Search',
+    Icons.edit_outlined: 'Edit',
+    Icons.more_horiz_rounded: 'More options',
+    Icons.settings_outlined: 'Settings',
+    Icons.ios_share_outlined: 'Share',
+    Icons.ios_share_rounded: 'Share',
+    Icons.qr_code_2_rounded: 'Show QR code',
+    Icons.notifications_none_rounded: 'Notifications',
+    Icons.notifications_outlined: 'Notifications',
+    Icons.close_rounded: 'Close',
+  };
+
+  String get _label => label ?? _defaultLabels[icon] ?? 'Button';
 
   @override
   Widget build(BuildContext context) {
@@ -223,13 +266,22 @@ class PpGlassIconButton extends StatelessWidget {
                   width: 1,
                 ),
               ),
-              child: InkWell(
-                onTap: onTap,
-                customBorder: const CircleBorder(),
-                child: SizedBox(
-                  width: size,
-                  height: size,
-                  child: Icon(icon, color: pt.ink2, size: size * 0.45),
+              child: Semantics(
+                button: true,
+                enabled: onTap != null,
+                label: _label,
+                excludeSemantics: true,
+                child: Tooltip(
+                  message: _label,
+                  child: InkWell(
+                    onTap: onTap,
+                    customBorder: const CircleBorder(),
+                    child: SizedBox(
+                      width: size,
+                      height: size,
+                      child: Icon(icon, color: pt.ink2, size: size * 0.45),
+                    ),
+                  ),
                 ),
               ),
             ),

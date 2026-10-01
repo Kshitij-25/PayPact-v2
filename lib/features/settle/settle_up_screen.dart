@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
+import 'package:paypact/core/utils/upi.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
@@ -18,7 +19,11 @@ import 'package:paypact/features/notification/domain/repositories/notifications_
 import 'package:paypact/features/settle/cubit/settle_cubit.dart';
 import 'package:paypact/features/settle/domain/settlement_entity.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SettleUpScreen extends StatelessWidget {
   const SettleUpScreen({
@@ -98,12 +103,10 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
   // navigation to this screen mints a new key = a legitimately separate payment.
   final String _idempotencyKey = const Uuid().v4();
 
-  // Index-aligned with _methods / _webMethods so the selected tile maps to a
-  // stored payment method. Only cash is confirmable today; the rest are ready
-  // for when external providers are wired.
+  // Index-aligned with [_methods]. Cash and bank transfer just record a payment
+  // that happened outside the app; UPI opens the payer's UPI app first.
   static const _methodIds = [
     PaymentMethod.cash,
-    PaymentMethod.wallet,
     PaymentMethod.upi,
     PaymentMethod.bankTransfer,
   ];
@@ -112,24 +115,146 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
       ? _methodIds[_selectedMethod]
       : PaymentMethod.cash;
 
-  static const _methods = [
-    _Method('Mark as paid in cash', 'No transfer · just record it',
-        Icons.payments_outlined),
-    _Method('PayPact wallet', 'Coming soon',
-        Icons.qr_code_rounded),
-    _Method('External UPI', 'Coming soon',
-        Icons.link_rounded),
-  ];
+  /// The payee's UPI address, if they've added one.
+  String? _payeeUpi;
+  bool _payeeUpiLoaded = false;
 
-  static const _webMethods = [
-    _Method('Mark as paid in cash', 'No transfer · just record it',
-        Icons.payments_outlined),
-    _Method('PayPact wallet · QR', 'Instant · zero fees · best for friends',
-        Icons.qr_code_rounded),
-    _Method('External UPI', 'PhonePe, GPay, Paytm', Icons.smartphone_rounded),
-    _Method('Bank transfer', 'NEFT · IMPS · same day',
-        Icons.account_balance_outlined),
-  ];
+  bool get _upiAvailable => widget.currency == 'INR' && _payeeUpi != null;
+
+  List<_Method> get _methods => [
+        const _Method('Mark as paid in cash', 'No transfer · just record it',
+            Icons.payments_outlined),
+        _Method(
+          'Pay with UPI',
+          widget.currency != 'INR'
+              ? 'UPI only works for ₹ groups'
+              : !_payeeUpiLoaded
+                  ? 'Checking…'
+                  : _payeeUpi == null
+                      ? '${widget.toUserName.split(' ').first} hasn\'t added a UPI ID'
+                      : 'Opens your UPI app · pays $_payeeUpi',
+          Icons.smartphone_rounded,
+        ),
+        const _Method('Bank transfer', 'Sent by NEFT / IMPS · just record it',
+            Icons.account_balance_outlined),
+      ];
+
+  bool _methodEnabled(int i) => i != 1 || _upiAvailable;
+
+  Future<void> _loadPayeeUpi() async {
+    try {
+      final doc = await locator<FirebaseFirestore>()
+          .collection('users')
+          .doc(widget.toUserId)
+          .get();
+      final upi = normalizeUpiId(doc.data()?['upiId'] as String?);
+      if (mounted) {
+        setState(() {
+          _payeeUpi = upi;
+          _payeeUpiLoaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _payeeUpiLoaded = true);
+    }
+  }
+
+  /// Opens the payer's UPI app for the payment; returns true once they
+  /// confirm it went through (we can't see the result of a UPI payment).
+  Future<bool> _payViaUpi(BuildContext context) async {
+    final upi = _payeeUpi!;
+    final uri = buildUpiUri(
+      upiId: upi,
+      payeeName: widget.toUserName,
+      amount: _amount,
+      note: 'PayPact · ${widget.groupName}',
+    );
+    var launched = false;
+    try {
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {}
+    if (!context.mounted) return false;
+
+    final pt = context.pt;
+    final paid = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(launched ? 'Did the payment go through?' : 'Pay with UPI'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+              launched
+                  ? 'Finish paying ${_fmt(_amount)} to ${widget.toUserName} in your UPI app, then come back and confirm.'
+                  : "No UPI app opened. Scan this with a UPI app on your phone, or pay $upi yourself, then confirm.",
+            ),
+            if (!launched) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(10),
+                color: Colors.white,
+                child: QrImageView(
+                    data: uri.toString(), size: 180, padding: EdgeInsets.zero),
+              ),
+              TextButton.icon(
+                onPressed: () => Clipboard.setData(ClipboardData(text: upi)),
+                icon: const Icon(Icons.copy_rounded, size: 16),
+                label: const Text('Copy UPI ID'),
+              ),
+            ],
+          ]),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(launched ? 'Not yet' : 'Cancel',
+                  style: TextStyle(color: pt.ink3))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Yes, I paid')),
+        ],
+      ),
+    );
+    return paid ?? false;
+  }
+
+  /// Confirm button: UPI opens the app first; bank transfer asks to be sure the
+  /// money was really sent, since recording it settles the balance.
+  Future<void> _onConfirm(BuildContext context) async {
+    if (_paymentMethod == PaymentMethod.upi) {
+      if (!await _payViaUpi(context) || !context.mounted) return;
+    } else if (_paymentMethod == PaymentMethod.bankTransfer) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Record bank transfer?'),
+          content: Text(
+              'Only record this once you\'ve actually sent ${_fmt(_amount)} to ${widget.toUserName}. '
+              'It will settle the balance.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Not yet')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text("Yes, I've sent it")),
+          ],
+        ),
+      );
+      if (ok != true || !context.mounted) return;
+    }
+    context.read<SettleCubit>().settle(
+          groupId: widget.groupId,
+          groupName: widget.groupName,
+          fromUserId: widget.fromUserId,
+          fromUserName: widget.fromUserName,
+          toUserId: widget.toUserId,
+          toUserName: widget.toUserName,
+          amount: _amount,
+          idempotencyKey: _idempotencyKey,
+          paymentMethod: _paymentMethod,
+        );
+  }
 
   String _money(double v) {
     final sym = currencyOf(widget.currency).symbol;
@@ -140,10 +265,11 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
   void initState() {
     super.initState();
     _amount = widget.suggestedAmount;
+    _loadPayeeUpi();
   }
 
   String _fmt(double v) =>
-      '${widget.currency}${v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2)}';
+      '${currencyOf(widget.currency).symbol}${v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2)}';
 
   @override
   Widget build(BuildContext context) {
@@ -331,8 +457,8 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
                                 _MethodTile(
                                   m: _methods[i],
                                   selected: _selectedMethod == i,
-                                  enabled: i == 0,
-                                  onTap: i == 0
+                                  enabled: _methodEnabled(i),
+                                  onTap: _methodEnabled(i)
                                       ? () =>
                                           setState(() => _selectedMethod = i)
                                       : null,
@@ -369,19 +495,7 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
                     return PayPactButton(
                       onPressed: loading
                           ? null
-                          : () {
-                              context.read<SettleCubit>().settle(
-                                    groupId: widget.groupId,
-                                    groupName: widget.groupName,
-                                    fromUserId: widget.fromUserId,
-                                    fromUserName: widget.fromUserName,
-                                    toUserId: widget.toUserId,
-                                    toUserName: widget.toUserName,
-                                    amount: _amount,
-                                    idempotencyKey: _idempotencyKey,
-                                    paymentMethod: _paymentMethod,
-                                  );
-                            },
+                          : () => _onConfirm(context),
                       label: loading
                           ? 'Recording…'
                           : 'Confirm — ${_fmt(_amount)} to $firstName',
@@ -625,21 +739,18 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
                                 padding: EdgeInsets.zero,
                                 child: Column(children: [
                                   for (var i = 0;
-                                      i < _webMethods.length;
+                                      i < _methods.length;
                                       i++) ...[
                                     if (i > 0)
                                       Divider(color: pt.border, height: 1),
                                     _MethodTile(
-                                      m: _webMethods[i],
+                                      m: _methods[i],
                                       selected: _selectedMethod == i,
-                                      enabled: true,
-                                      onTap: i == 0
+                                      enabled: _methodEnabled(i),
+                                      onTap: _methodEnabled(i)
                                           ? () => setState(
                                               () => _selectedMethod = i)
-                                          : () => ScaffoldMessenger.of(context)
-                                              .showSnackBar(SnackBar(
-                                                  content: Text(
-                                                      '${_webMethods[i].label} — coming soon'))),
+                                          : null,
                                     ),
                                   ],
                                 ]),
@@ -668,19 +779,7 @@ class _SettleUpBodyState extends State<_SettleUpBody> {
                                 return PayPactButton(
                                   onPressed: loading
                                       ? null
-                                      : () =>
-                                          context.read<SettleCubit>().settle(
-                                                groupId: widget.groupId,
-                                                groupName: widget.groupName,
-                                                fromUserId: widget.fromUserId,
-                                                fromUserName:
-                                                    widget.fromUserName,
-                                                toUserId: widget.toUserId,
-                                                toUserName: widget.toUserName,
-                                                amount: _amount,
-                                                idempotencyKey: _idempotencyKey,
-                                                paymentMethod: _paymentMethod,
-                                              ),
+                                      : () => _onConfirm(context),
                                   label: loading
                                       ? 'Recording…'
                                       : 'Confirm — ${_money(_amount)} to $firstName',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -17,7 +18,9 @@ import 'package:paypact/features/expense/domain/repositories/expense_repository.
 import 'package:paypact/features/expense/presentation/cubit/expense_detail_cubit.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
+import 'package:paypact/features/expense/presentation/widgets/expense_detail_extras.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ExpenseDetailScreen extends StatelessWidget {
   const ExpenseDetailScreen(
@@ -141,7 +144,8 @@ class _ExpenseDetailBody extends StatelessWidget {
                           ),
                           const SizedBox(width: 10),
                           PpGlassIconButton(
-                              icon: Icons.more_horiz_rounded, onTap: () {}),
+                              icon: Icons.more_horiz_rounded,
+                              onTap: () => _showMenu(context, loaded)),
                         ]),
                       ),
                       Padding(
@@ -151,7 +155,7 @@ class _ExpenseDetailBody extends StatelessWidget {
                           children: [
                             PpChip(
                               label:
-                                  '${_emojiForCategory(cat)}  ${_capitalize(expense.category)} · ${expense.splits.length} people',
+                                  '${loaded.customCategoryEmoji ?? _emojiForCategory(cat)}  ${loaded.customCategoryName ?? _capitalize(_isBuiltin(expense.category) ? expense.category : 'other')} · ${expense.splits.length} people',
                               tone: PpChipTone.neutral,
                             ),
                             const SizedBox(height: 14),
@@ -232,35 +236,136 @@ class _ExpenseDetailBody extends StatelessWidget {
                             _MetaRow(
                               icon: Icons.calendar_today_outlined,
                               label: 'Date',
-                              value: DateFormat('MMM d, yyyy · h:mm a')
-                                  .format(expense.createdAt),
+                              value: DateFormat('MMM d, yyyy')
+                                  .format(expense.date),
                             ),
+                            if (expense.recurringId != null) ...[
+                              Divider(color: pt.border, height: 1),
+                              const _MetaRow(
+                                icon: Icons.repeat_rounded,
+                                label: 'Repeats',
+                                value: 'Recurring expense',
+                              ),
+                            ],
+                            if (expense.createdAt.difference(expense.date).abs() >
+                                const Duration(days: 1)) ...[
+                              Divider(color: pt.border, height: 1),
+                              _MetaRow(
+                                icon: Icons.edit_calendar_outlined,
+                                label: 'Added',
+                                value: DateFormat('MMM d, yyyy')
+                                    .format(expense.createdAt),
+                              ),
+                            ],
                           ]),
                         ),
                       ),
+                      if ((expense.note ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: PayPactSpacing.s6),
+                          child: PayPactCard(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.notes_rounded,
+                                    size: 18, color: pt.ink2),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: SelectableText(expense.note!,
+                                      style: PayPactTypography.bodyMd
+                                          .copyWith(color: pt.ink)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (expense.receiptUrl != null) ...[
+                        const SizedBox(height: 14),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: PayPactSpacing.s6),
+                          child: GestureDetector(
+                            onTap: () =>
+                                showReceiptViewer(context, expense.receiptUrl!),
+                            child: PayPactCard(
+                              padding: const EdgeInsets.all(10),
+                              child: Row(children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: SizedBox(
+                                    width: 56,
+                                    height: 56,
+                                    child: Image.network(expense.receiptUrl!,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            const Icon(
+                                                Icons.receipt_long_outlined)),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Text('Receipt',
+                                      style: PayPactTypography.bodyMd.copyWith(
+                                          color: pt.ink,
+                                          fontWeight: FontWeight.w600)),
+                                ),
+                                Icon(Icons.open_in_full_rounded,
+                                    size: 18, color: pt.ink3),
+                              ]),
+                            ),
+                          ),
+                        ),
+                      ],
                       Padding(
                         padding: const EdgeInsets.fromLTRB(
                             PayPactSpacing.s6, 12, PayPactSpacing.s6, 0),
                         child: Row(children: [
+                          if (iPaid && loaded.remindable.isNotEmpty) ...[
+                            Expanded(
+                              child: PayPactButton(
+                                onPressed: () => _remind(context, loaded),
+                                label:
+                                    'Remind ${loaded.remindable.length} ${loaded.remindable.length == 1 ? 'person' : 'people'}',
+                                variant: PayPactButtonVariant.secondary,
+                                isFullWidth: true,
+                                leftIcon: Icons.notifications_none_rounded,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                          ],
                           Expanded(
                             child: PayPactButton(
-                              onPressed: () {},
-                              label:
-                                  'Remind ${expense.splits.where((s) => s.userId != expense.paidById).length} people',
-                              variant: PayPactButtonVariant.secondary,
+                              onPressed: () =>
+                                  _confirmDelete(context, loaded),
+                              label: 'Delete',
+                              variant: PayPactButtonVariant.danger,
                               isFullWidth: true,
-                              leftIcon: Icons.notifications_none_rounded,
+                              leftIcon: Icons.delete_outline_rounded,
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          PayPactButton(
-                            onPressed: () =>
-                                _confirmDelete(context, expense.id),
-                            label: '',
-                            variant: PayPactButtonVariant.danger,
-                            leftIcon: Icons.delete_outline_rounded,
-                          ),
                         ]),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(PayPactSpacing.s6,
+                            24, PayPactSpacing.s6, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const PpSectionLabel(
+                                label: 'COMMENTS', padding: EdgeInsets.zero),
+                            const SizedBox(height: 10),
+                            ExpenseCommentsSection(
+                              expense: expense,
+                              groupName: loaded.groupName,
+                              currentUserId: currentUserId,
+                              currentUserName: _userName(context),
+                            ),
+                            ExpenseHistorySection(expense: expense),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -273,13 +378,126 @@ class _ExpenseDetailBody extends StatelessWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, String expenseId) {
+  String _userName(BuildContext context) {
+    final auth = context.read<AuthCubit>().state;
+    return auth is AuthAuthenticated ? auth.user.name : '';
+  }
+
+  Future<void> _remind(BuildContext context, ExpenseDetailLoaded loaded) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final sent = await context
+          .read<ExpenseDetailCubit>()
+          .remind(actorName: _userName(context));
+      messenger.showSnackBar(SnackBar(
+        content: Text(sent == 0
+            ? "You've already reminded everyone today."
+            : 'Reminder sent to $sent ${sent == 1 ? 'person' : 'people'}.'),
+      ));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text("Couldn't send reminders. Try again.")));
+    }
+  }
+
+  String _details(ExpenseDetailLoaded l) {
+    final e = l.expense;
+    final sym = currencySymbol(l.currency);
+    final lines = <String>[
+      '${e.title} — $sym${e.amount.toStringAsFixed(e.amount.truncateToDouble() == e.amount ? 0 : 2)}',
+      '${e.paidByName} paid on ${DateFormat('MMM d, yyyy').format(e.date)}',
+      if (l.groupName.isNotEmpty) 'Group: ${l.groupName}',
+      for (final s in e.splits)
+        '  • ${s.userName}: $sym${s.amount.toStringAsFixed(2)}',
+      if ((e.note ?? '').isNotEmpty) 'Note: ${e.note}',
+    ];
+    return lines.join('\n');
+  }
+
+  void _showMenu(BuildContext context, ExpenseDetailLoaded loaded) {
+    final pt = context.pt;
+    final cubit = context.read<ExpenseDetailCubit>();
+    final messenger = ScaffoldMessenger.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: pt.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheet) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('Edit'),
+            onTap: () async {
+              Navigator.pop(sheet);
+              await context
+                  .push('/group/$groupId/expense/$expenseId/edit');
+              if (!cubit.isClosed) cubit.load();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.copy_all_outlined),
+            title: const Text('Duplicate (dated today)'),
+            onTap: () async {
+              Navigator.pop(sheet);
+              try {
+                await cubit.duplicate(actorName: _userName(context));
+                messenger.showSnackBar(const SnackBar(
+                    content: Text('Duplicated. Find it in the group.')));
+              } catch (_) {
+                messenger.showSnackBar(const SnackBar(
+                    content: Text("Couldn't duplicate the expense.")));
+              }
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.ios_share_rounded),
+            title: const Text('Share details'),
+            onTap: () async {
+              Navigator.pop(sheet);
+              final text = _details(loaded);
+              try {
+                final r = await SharePlus.instance.share(ShareParams(text: text));
+                if (r.status != ShareResultStatus.unavailable) return;
+              } catch (_) {}
+              await Clipboard.setData(ClipboardData(text: text));
+              messenger.showSnackBar(
+                  const SnackBar(content: Text('Details copied')));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.content_copy_rounded),
+            title: const Text('Copy details'),
+            onTap: () async {
+              Navigator.pop(sheet);
+              await Clipboard.setData(ClipboardData(text: _details(loaded)));
+              messenger.showSnackBar(
+                  const SnackBar(content: Text('Details copied')));
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.delete_outline_rounded, color: pt.negative),
+            title: Text('Delete', style: TextStyle(color: pt.negative)),
+            onTap: () {
+              Navigator.pop(sheet);
+              _confirmDelete(context, loaded);
+            },
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, ExpenseDetailLoaded loaded) {
+    final messenger = ScaffoldMessenger.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete expense?'),
         content: const Text(
-            'This will remove the expense and update all balances.'),
+            'This will remove the expense and update all balances. You can undo right after.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -287,13 +505,28 @@ class _ExpenseDetailBody extends StatelessWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final auth = context.read<AuthCubit>().state;
-              final actorName =
-                  auth is AuthAuthenticated ? auth.user.name : '';
-              await context.read<ExpenseDetailCubit>().delete(
-                    actorName: actorName,
-                  );
+              final actorName = _userName(context);
+              final actorId = loaded.currentUserId;
+              final removed = await context
+                  .read<ExpenseDetailCubit>()
+                  .delete(actorName: actorName);
               if (context.mounted) context.pop();
+              if (removed == null) return;
+              messenger.showSnackBar(SnackBar(
+                content: Text('"${removed.title}" deleted'),
+                duration: const Duration(seconds: 8),
+                action: SnackBarAction(
+                  label: 'Undo',
+                  onPressed: () => restoreDeletedExpense(
+                    expenses: locator<ExpenseRepository>(),
+                    notifications: locator<NotificationsRepository>(),
+                    expense: removed,
+                    actorId: actorId,
+                    actorName: actorName,
+                    groupName: loaded.groupName,
+                  ),
+                ),
+              ));
             },
             child:
                 const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -303,6 +536,12 @@ class _ExpenseDetailBody extends StatelessWidget {
     );
   }
 }
+
+const _builtinCategories = {
+  'food', 'stay', 'transport', 'shopping', 'entertainment', 'other',
+  'trip', 'home', 'friends', 'couple',
+};
+bool _isBuiltin(String c) => _builtinCategories.contains(c);
 
 /// Whether every share is (within rounding) the same.
 bool _isEvenSplit(ExpenseEntity e) {

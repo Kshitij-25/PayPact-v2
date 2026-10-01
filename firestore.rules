@@ -17,11 +17,16 @@ service cloud.firestore {
     }
 
     // ── Users ──────────────────────────────────────────────────────────────
-    // Profiles are readable by any signed-in user: member search looks people
-    // up by email / name prefix. Anything sensitive (push tokens) lives under
-    // `private/` where only the owner can read it.
+    // Anything sensitive (push tokens) lives under `private/` where only the
+    // owner can read it.
+    //
+    // Documents can be fetched by id (needed to check someone's notification
+    // preferences and show names) but the collection can't be listed or
+    // queried: finding people goes through the `searchUsers` function, which
+    // masks email addresses.
     match /users/{userId} {
-      allow read: if signedIn();
+      allow get: if signedIn();
+      allow list: if false;
       allow create, update, delete: if isSelf(userId);
 
       match /private/{doc} {
@@ -53,6 +58,13 @@ service cloud.firestore {
         return request.resource.data.diff(resource.data).affectedKeys();
       }
 
+      // Maintained by Cloud Functions only — a client could otherwise forge
+      // its group's balances.
+      function summaryKeys() {
+        return ['balances', 'totalSpentMinor', 'expenseCount', 'lastActivityAt',
+                'lastExpenseTitle', 'summaryVersion'];
+      }
+
       // A member removing only themselves (and any admin role they held).
       function isLeaving() {
         return changedKeys().hasOnly(['memberIds', 'memberNames', 'adminIds', 'updatedAt']) &&
@@ -66,12 +78,14 @@ service cloud.firestore {
       allow create: if signedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.memberIds == [request.auth.uid] &&
-        request.resource.data.get('adminIds', [request.auth.uid]) == [request.auth.uid];
+        request.resource.data.get('adminIds', [request.auth.uid]) == [request.auth.uid] &&
+        !request.resource.data.keys().hasAny(summaryKeys());
 
       // Admins can change anything, but `adminIds` may only ever list current
       // members (so a departed admin can't silently regain the role on rejoin).
       allow update: if signedIn() && isMember(resource.data) && (
         (isAdmin(resource.data) &&
+          !changedKeys().hasAny(summaryKeys()) &&
           request.resource.data.get('adminIds', []).hasOnly(request.resource.data.memberIds)) ||
         // Expense / settlement writes touch the group so listeners refresh.
         changedKeys().hasOnly(['updatedAt']) ||
@@ -84,6 +98,38 @@ service cloud.firestore {
       allow delete: if signedIn() && isAdmin(resource.data);
 
       match /expenses/{expenseId} {
+        allow read: if isMemberOf(groupId);
+        allow create: if isMemberOf(groupId) &&
+          request.resource.data.createdById == request.auth.uid;
+        allow update: if isMemberOf(groupId) &&
+          request.resource.data.createdById == resource.data.createdById;
+        allow delete: if isMemberOf(groupId);
+
+        // Discussion on an expense: members add comments; only the author
+        // can remove their own; nobody edits.
+        match /comments/{commentId} {
+          allow read: if isMemberOf(groupId);
+          allow create: if isMemberOf(groupId) &&
+            request.resource.data.authorId == request.auth.uid &&
+            request.resource.data.text is string &&
+            request.resource.data.text.size() > 0 &&
+            request.resource.data.text.size() <= 1000;
+          allow update: if false;
+          allow delete: if isMemberOf(groupId) &&
+            resource.data.authorId == request.auth.uid;
+        }
+
+        // Append-only edit log.
+        match /history/{entryId} {
+          allow read: if isMemberOf(groupId);
+          allow create: if isMemberOf(groupId) &&
+            request.resource.data.by == request.auth.uid;
+          allow update, delete: if false;
+        }
+      }
+
+      // Recurring-expense templates; a daily job turns them into expenses.
+      match /recurring/{recurringId} {
         allow read: if isMemberOf(groupId);
         allow create: if isMemberOf(groupId) &&
           request.resource.data.createdById == request.auth.uid;

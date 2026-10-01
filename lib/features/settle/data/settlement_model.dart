@@ -12,6 +12,7 @@ class SettlementModel extends SettlementEntity {
     required super.id,
     required super.groupId,
     super.type,
+    super.reversesId,
     required super.fromUserId,
     required super.fromUserName,
     required super.toUserId,
@@ -40,6 +41,7 @@ class SettlementModel extends SettlementEntity {
       id: doc.id,
       groupId: groupId,
       type: data['type'] as String? ?? kSettlementType,
+      reversesId: data['reversesId'] as String?,
       fromUserId: data['fromUserId'] as String? ?? '',
       fromUserName: data['fromUserName'] as String? ?? '',
       toUserId: data['toUserId'] as String? ?? '',
@@ -73,6 +75,7 @@ class SettlementModel extends SettlementEntity {
       id: id,
       groupId: groupId,
       type: data['type'] as String? ?? kSettlementType,
+      reversesId: data['reversesId'] as String?,
       fromUserId: data['fromUserId'] as String? ?? '',
       fromUserName: data['fromUserName'] as String? ?? '',
       toUserId: data['toUserId'] as String? ?? '',
@@ -95,6 +98,7 @@ class SettlementModel extends SettlementEntity {
   /// `createdAt` is a server timestamp unless [serverTimestamp] is false (tests).
   Map<String, dynamic> toMap({bool serverTimestamp = true}) => {
         'type': type,
+        if (reversesId != null) 'reversesId': reversesId,
         'fromUserId': fromUserId,
         'fromUserName': fromUserName,
         'toUserId': toUserId,

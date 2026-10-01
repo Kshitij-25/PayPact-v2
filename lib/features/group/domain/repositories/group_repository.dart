@@ -17,6 +17,13 @@ abstract class GroupRepository {
   Future<void> updateGroup(String groupId, {String? name, String? emoji, String? category});
   Future<void> deleteGroup(String groupId);
 
+  /// Sets (or clears, with null) the group's cover photo URL.
+  Future<void> setCoverUrl(String groupId, String? url);
+
+  /// Replaces the group's custom categories. Admin only.
+  Future<void> setCustomCategories(
+      String groupId, List<CustomCategory> categories);
+
   /// Returns the group's invite code, creating one if it has none. Admin only.
   Future<String> ensureInviteCode(String groupId);
 

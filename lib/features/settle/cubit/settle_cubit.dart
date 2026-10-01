@@ -38,13 +38,18 @@ class SettleCubit extends Cubit<SettleState> {
         emit(SettleError('Group not found.'));
         return;
       }
-      final expenses = await _expenseRepo.getGroupExpenses(groupId);
-      final settlements = await _expenseRepo.getGroupSettlements(groupId);
-      final netBalances = computeNetBalances(
-        expenses: expenses,
-        settlements: settlements,
-        memberIds: group.memberIds,
-      );
+      // The server-maintained summary is the ledger's running total; only
+      // groups that predate it need the full history re-read.
+      final Map<String, int> netBalances;
+      if (group.hasSummary) {
+        netBalances = group.balances!;
+      } else {
+        netBalances = computeNetBalances(
+          expenses: await _expenseRepo.getGroupExpenses(groupId),
+          settlements: await _expenseRepo.getGroupSettlements(groupId),
+          memberIds: group.memberIds,
+        );
+      }
 
       // ── Validate (hard rules block; overpayment is allowed) ──
       final amountPaise = toPaise(amount);
@@ -98,6 +103,57 @@ class SettleCubit extends Cubit<SettleState> {
       ));
     } catch (e) {
       emit(SettleError(e.toString()));
+    }
+  }
+
+  /// Undoes a settlement by appending its opposite (settlements are an
+  /// immutable ledger, so nothing is edited or deleted). Only the person who
+  /// *received* the payment can reverse it — "this never arrived" — and each
+  /// settlement can be reversed once (the reversal's id is derived from it).
+  /// Returns an error message, or null on success.
+  Future<String?> reverseSettlement({
+    required String groupId,
+    required String groupName,
+    required String settlementId,
+    required String payerId,
+    required String payerName,
+    required String payeeId,
+    required String payeeName,
+    required int amountPaise,
+    required String currency,
+    String? note,
+  }) async {
+    try {
+      await _expenseRepo.recordSettlement(
+        groupId: groupId,
+        fromUserId: payeeId,
+        fromUserName: payeeName,
+        toUserId: payerId,
+        toUserName: payerName,
+        amountPaise: amountPaise,
+        currency: currency,
+        createdById: payeeId,
+        idempotencyKey: 'rev_$settlementId',
+        receiptId: 'PP-REV-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).toUpperCase()}',
+        note: note ?? 'Reversal: payment not received',
+        type: kReversalType,
+        reversesId: settlementId,
+        paymentMethod: PaymentMethod.cash,
+      );
+      await _notifRepo.push(
+        targetUserId: payerId,
+        type: 'settlement',
+        title: '$payeeName reversed a payment',
+        body:
+            '$payeeName marked ${currencySymbol(currency)}${(amountPaise / 100).toStringAsFixed(0)} in $groupName as not received.',
+        groupId: groupId,
+        groupName: groupName,
+        actorId: payeeId,
+        actorName: payeeName,
+      );
+      return null;
+    } catch (e) {
+      return "Couldn't reverse that payment. Try again.";
     }
   }
 }

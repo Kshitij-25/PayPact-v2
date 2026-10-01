@@ -5,6 +5,8 @@ import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/auth_redirect.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/group/presentation/screens/join_group_screen.dart';
+import 'package:paypact/features/search/search_logic.dart';
+import 'package:paypact/features/search/search_screen.dart';
 import 'package:paypact/design_system/tokens/motion.dart';
 import 'package:paypact/features/activity/activity_screen.dart';
 import 'package:paypact/features/auth/presentation/screens/create_account_screen.dart';
@@ -27,6 +29,11 @@ import 'package:paypact/features/settle/settle_up_screen.dart';
 import 'package:paypact/features/splash/splash_screen.dart';
 
 class AppRoutes {
+  /// Expense detail. The group id is part of the URL (not just navigation
+  /// `extra`) so the page survives a reload and works from notification links.
+  static String expense(String expenseId, String? groupId) =>
+      '/expense/$expenseId?groupId=${groupId ?? ''}';
+
   static const splash = '/splash';
   static const onboarding = '/onboarding';
   static const signIn = '/sign-in';
@@ -44,6 +51,7 @@ class AppRoutes {
   static const settleUp = '/group/:groupId/settle';
   static const signUp = '/sign-up';
   static const addMembers = '/group/add-members';
+  static const search = '/search';
   static const join = '/join/:code';
   static const invite = '/invite/:code';
 }
@@ -157,6 +165,20 @@ final appRouter = GoRouter(
           child: JoinGroupScreen(code: state.pathParameters['code'] ?? ''),
         ),
       ),
+    GoRoute(
+      path: AppRoutes.search,
+      pageBuilder: (context, state) => _fade(
+        key: state.pageKey,
+        child: SearchScreen(
+          scope: switch (state.uri.queryParameters['scope']) {
+            'groups' => SearchScope.groups,
+            'expenses' => SearchScope.expenses,
+            _ => SearchScope.all,
+          },
+        ),
+        duration: PayPactMotion.fast,
+      ),
+    ),
     GoRoute(
       path: AppRoutes.addMembers,
       pageBuilder: (context, state) {
@@ -352,8 +374,10 @@ final appRouter = GoRouter(
             key: state.pageKey,
             child: ExpenseDetailScreen(
               expenseId: state.pathParameters['expenseId']!,
-              groupId:
-                  ((state.extra as Map<String, dynamic>?)?['groupId'] as String?) ?? '',
+              groupId: ((state.extra as Map<String, dynamic>?)?['groupId']
+                      as String?) ??
+                  state.uri.queryParameters['groupId'] ??
+                  '',
             ),
             forward: const Duration(milliseconds: 280),
             reverse: const Duration(milliseconds: 230),

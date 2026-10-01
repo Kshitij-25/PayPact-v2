@@ -16,6 +16,7 @@ import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/group/presentation/cubit/group_detail_cubit.dart';
 import 'package:paypact/features/group/presentation/widgets/group_tab_views.dart';
@@ -115,7 +116,7 @@ class _GroupDetailBody extends StatelessWidget {
                 final youOwe = balance < 0;
                 final absAmount = balance.abs();
                 final amtStr =
-                    '${group.currency}${absAmount.toStringAsFixed(absAmount.truncateToDouble() == absAmount ? 0 : 2)}';
+                    '${currencySymbol(group.currency as String)}${absAmount.toStringAsFixed(absAmount.truncateToDouble() == absAmount ? 0 : 2)}';
 
                 return InkWell(
                   borderRadius: BorderRadius.circular(12),
@@ -243,15 +244,38 @@ class _GroupDetailBody extends StatelessWidget {
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      Positioned(
-                        top: -40,
-                        right: -30,
-                        child: Opacity(
-                          opacity: 0.18,
-                          child: Text(group.emoji,
-                              style: TextStyle(fontSize: context.sp(200))),
+                      if (group.coverUrl != null) ...[
+                        Positioned.fill(
+                          child: Image.network(group.coverUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const SizedBox.shrink()),
                         ),
-                      ),
+                        Positioned.fill(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.15),
+                                  pt.bg,
+                                ],
+                                stops: const [0, 0.9],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ] else
+                        Positioned(
+                          top: -40,
+                          right: -30,
+                          child: Opacity(
+                            opacity: 0.18,
+                            child: Text(group.emoji,
+                                style: TextStyle(fontSize: context.sp(200))),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -293,8 +317,8 @@ class _GroupDetailBody extends StatelessWidget {
                                     .copyWith(color: pt.ink)),
                             const SizedBox(height: 6),
                             Text(
-                              '${expenses.length} expenses · '
-                              '${currencySymbol(group.currency)}${_totalAmount(expenses).toStringAsFixed(0)} tracked',
+                              '${group.expenseCount ?? expenses.length} expenses · '
+                              '${currencySymbol(group.currency)}${(group.totalSpentMinor != null ? group.totalSpentMinor! / 100 : _totalAmount(expenses)).toStringAsFixed(0)} tracked',
                               style: PayPactTypography.bodyLg
                                   .copyWith(color: pt.ink2),
                             ),
@@ -544,15 +568,26 @@ class _MobileTabbedSectionState extends State<_MobileTabbedSection> {
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
+                  if (i == expenses.length) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: TextButton.icon(
+                          onPressed: () =>
+                              context.read<GroupDetailCubit>().loadMore(),
+                          icon: const Icon(Icons.expand_more_rounded),
+                          label: const Text('Show older expenses'),
+                        ),
+                      ),
+                    );
+                  }
                   final e = expenses[i];
                   final myShare = e.splitAmountFor(widget.userId);
                   final sharePos = e.paidById == widget.userId;
                   final shareAmt = sharePos ? e.amount - myShare : -myShare;
                   return GestureDetector(
-                    onTap: () => context.push(
-                      '/expense/${e.id}',
-                      extra: {'groupId': widget.groupId},
-                    ),
+                    onTap: () => context
+                        .push(AppRoutes.expense(e.id, widget.groupId)),
                     child: _ExpenseRow(
                       expense: e,
                       currency: currency,
@@ -561,7 +596,7 @@ class _MobileTabbedSectionState extends State<_MobileTabbedSection> {
                     ),
                   );
                 },
-                childCount: expenses.length,
+                childCount: expenses.length + (loaded.canLoadMore ? 1 : 0),
               ),
             )
         else
@@ -572,7 +607,8 @@ class _MobileTabbedSectionState extends State<_MobileTabbedSection> {
               child: switch (_active) {
                 'balances' => GroupBalancesView(
                     loaded: loaded, currentUserId: widget.userId),
-                'activity' => GroupActivityView(loaded: loaded),
+                'activity' => GroupActivityView(
+                    loaded: loaded, currentUserId: widget.userId),
                 _ => GroupMembersView(
                     loaded: loaded, currentUserId: widget.userId),
               },
@@ -623,7 +659,7 @@ class _ExpenseRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final pt = context.pt;
     final cat = _catFromString(expense.category);
-    final dateStr = _formatDate(expense.createdAt);
+    final dateStr = _formatDate(expense.date);
     final sym = currencySymbol(currency);
 
     return Padding(
@@ -744,6 +780,14 @@ String _formatDate(DateTime dt) {
   return DateFormat('MMM d').format(dt).toUpperCase();
 }
 
+/// A category's display name: the group's own name for custom categories.
+String _categoryName(GroupEntity group, String id) {
+  for (final c in group.customCategories) {
+    if (c.id == id) return c.name;
+  }
+  return _capitalize(id);
+}
+
 String _capitalize(String s) =>
     s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
@@ -779,7 +823,7 @@ class _SimplifiedDebtsSection extends StatelessWidget {
     if (debts.isEmpty) return const SizedBox.shrink();
 
     String fmtAmt(double v) =>
-        '$currency${v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2)}';
+        '${currencySymbol(currency)}${v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2)}';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
@@ -1066,7 +1110,10 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
   Widget _coverHeader(BuildContext context, PayPactThemeExtension pt,
       List<Color> tones, String sym) {
     final ex = loaded.expenses;
-    final total = ex.fold<double>(0, (s, e) => s + e.amount);
+    // The summary covers every expense, not just the page that's loaded.
+    final total = loaded.group.totalSpentMinor != null
+        ? loaded.group.totalSpentMinor! / 100
+        : ex.fold<double>(0, (s, e) => s + e.amount);
     final range = _dateRange(ex);
 
     return Container(
@@ -1081,11 +1128,29 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
+            if (loaded.group.coverUrl != null) ...[
+              Positioned.fill(
+                child: Image.network(loaded.group.coverUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+              ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.black.withValues(alpha: 0.2), pt.bg],
+                    ),
+                  ),
+                ),
+              ),
+            ],
             Positioned(
               top: -56,
               right: 24,
               child: Opacity(
-                opacity: 0.45,
+                opacity: loaded.group.coverUrl != null ? 0 : 0.45,
                 child: Text(group.emoji,
                     style: const TextStyle(fontSize: 170)),
               ),
@@ -1201,7 +1266,7 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
 
   Widget _tabBar(BuildContext context, PayPactThemeExtension pt) {
     final tabs = <List<String>>[
-      ['expenses', 'Expenses · ${loaded.expenses.length}'],
+      ['expenses', 'Expenses · ${loaded.group.expenseCount ?? loaded.expenses.length}'],
       ['balances', 'Balances'],
       ['activity', 'Activity'],
       ['settle', 'Settle map'],
@@ -1237,7 +1302,7 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
       case 'balances':
         return GroupBalancesView(loaded: loaded, currentUserId: _uid);
       case 'activity':
-        return GroupActivityView(loaded: loaded);
+        return GroupActivityView(loaded: loaded, currentUserId: _uid);
       default:
         return GroupMembersView(loaded: loaded, currentUserId: _uid);
     }
@@ -1253,13 +1318,12 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
     var list = _filterCategory == null
         ? [...all]
         : all.where((e) => e.category == _filterCategory).toList();
-    list.sort((a, b) => _sortDesc
-        ? b.createdAt.compareTo(a.createdAt)
-        : a.createdAt.compareTo(b.createdAt));
+    list.sort((a, b) =>
+        _sortDesc ? b.date.compareTo(a.date) : a.date.compareTo(b.date));
 
     final groups = <String, List<ExpenseEntity>>{};
     for (final e in list) {
-      groups.putIfAbsent(_formatDate(e.createdAt), () => []).add(e);
+      groups.putIfAbsent(_formatDate(e.date), () => []).add(e);
     }
 
     return Column(
@@ -1276,7 +1340,8 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
                   _filterChip(pt, 'All categories', _filterCategory == null,
                       () => setState(() => _filterCategory = null)),
                   for (final c in cats)
-                    _filterChip(pt, _capitalize(c), _filterCategory == c,
+                    _filterChip(pt, _categoryName(loaded.group, c),
+                        _filterCategory == c,
                         () => setState(() => _filterCategory = c)),
                 ],
               ),
@@ -1329,11 +1394,23 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
                 expense: entry.value[i],
                 uid: _uid,
                 sym: sym,
-                onTap: () => context.push('/expense/${entry.value[i].id}',
-                    extra: {'groupId': groupId}),
+                onTap: () => context.push(
+                    AppRoutes.expense(entry.value[i].id, groupId)),
               ),
             ],
           ],
+        if (loaded.canLoadMore)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Center(
+              child: PayPactButton(
+                onPressed: () => context.read<GroupDetailCubit>().loadMore(),
+                label: 'Show older expenses',
+                variant: PayPactButtonVariant.secondary,
+                leftIcon: Icons.expand_more_rounded,
+              ),
+            ),
+          ),
       ],
     );
   }

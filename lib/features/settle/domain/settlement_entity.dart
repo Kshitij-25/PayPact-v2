@@ -44,12 +44,19 @@ class PaymentMethod {
 /// from future entry kinds (e.g. reversals) when reading the collection.
 const String kSettlementType = 'settlement';
 
+/// A payment that undoes an earlier settlement (money sent back). Settlements
+/// are immutable, so correcting one means appending its opposite.
+const String kReversalType = 'reversal';
+
 class SettlementEntity {
   final String id;
   final String groupId;
 
-  /// Always [kSettlementType] for now.
+  /// [kSettlementType], or [kReversalType] for a payment that undoes another.
   final String type;
+
+  /// For a [kReversalType] entry: id of the settlement it reverses.
+  final String? reversesId;
 
   final String fromUserId;
   final String fromUserName;
@@ -91,6 +98,7 @@ class SettlementEntity {
     required this.id,
     required this.groupId,
     this.type = kSettlementType,
+    this.reversesId,
     required this.fromUserId,
     required this.fromUserName,
     required this.toUserId,
@@ -106,6 +114,8 @@ class SettlementEntity {
     required this.receiptId,
     required this.createdAt,
   });
+
+  bool get isReversal => type == kReversalType;
 
   /// Amount in rupees, for display only.
   double get amount => amountPaise / 100.0;

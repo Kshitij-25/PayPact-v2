@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
@@ -9,6 +10,7 @@ import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/group/presentation/cubit/group_detail_cubit.dart';
 import 'package:paypact/features/group/presentation/widgets/invite_sheet.dart';
+import 'package:paypact/features/settle/cubit/settle_cubit.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
 String _money(String currency, double v) {
@@ -128,16 +130,56 @@ class GroupActivityItem {
     required this.title,
     required this.subtitle,
     required this.amount,
+    this.settlementId,
+    this.fromUserId,
+    this.toUserId,
+    this.fromUserName,
+    this.toUserName,
+    this.amountPaise,
+    this.isReversal = false,
+    this.reversed = false,
   });
   final DateTime at;
   final bool isSettlement;
   final String title;
   final String subtitle;
   final double amount;
+
+  // Settlement details (null for expenses).
+  final String? settlementId;
+  final String? fromUserId;
+  final String? toUserId;
+  final String? fromUserName;
+  final String? toUserName;
+  final int? amountPaise;
+
+  /// This entry undoes an earlier payment.
+  final bool isReversal;
+
+  /// A later entry has already reversed this payment.
+  final bool reversed;
+
+  /// Payments can be disputed for two weeks.
+  static const reversalWindow = Duration(days: 14);
+
+  /// Only the person who was paid can say "this never arrived", once, and only
+  /// for a payment that hasn't already been reversed.
+  bool canReverse(String userId, DateTime now) =>
+      isSettlement &&
+      !isReversal &&
+      !reversed &&
+      settlementId != null &&
+      toUserId == userId &&
+      now.difference(at) <= reversalWindow;
 }
 
 /// Expenses and settle-up payments merged into one newest-first timeline.
 List<GroupActivityItem> buildGroupActivity(GroupDetailLoaded loaded) {
+  final reversedIds = {
+    for (final s in loaded.settlements)
+      if (s['type'] == 'reversal' && s['reversesId'] is String)
+        s['reversesId'] as String,
+  };
   final items = <GroupActivityItem>[
     for (final e in loaded.expenses)
       GroupActivityItem(
@@ -148,24 +190,83 @@ List<GroupActivityItem> buildGroupActivity(GroupDetailLoaded loaded) {
         amount: e.amount,
       ),
     for (final s in loaded.settlements)
-      GroupActivityItem(
-        at: (s['createdAt'] as DateTime?) ??
-            DateTime.fromMillisecondsSinceEpoch(0),
-        isSettlement: true,
-        title:
-            '${s['fromUserName'] ?? 'Someone'} paid ${s['toUserName'] ?? 'someone'}',
-        subtitle: 'Settled up',
-        amount: s['amountPaise'] is num
-            ? (s['amountPaise'] as num) / 100
-            : (s['amount'] as num?)?.toDouble() ?? 0,
-      ),
+      () {
+        final isReversal = s['type'] == 'reversal';
+        final paise = s['amountPaise'] is num
+            ? (s['amountPaise'] as num).toInt()
+            : (((s['amount'] as num?)?.toDouble() ?? 0) * 100).round();
+        final id = s['id'] as String?;
+        return GroupActivityItem(
+          at: (s['createdAt'] as DateTime?) ??
+              DateTime.fromMillisecondsSinceEpoch(0),
+          isSettlement: true,
+          isReversal: isReversal,
+          reversed: id != null && reversedIds.contains(id),
+          title:
+              '${s['fromUserName'] ?? 'Someone'} paid ${s['toUserName'] ?? 'someone'}',
+          subtitle: isReversal ? 'Payment reversed' : 'Settled up',
+          amount: paise / 100,
+          settlementId: id,
+          fromUserId: s['fromUserId'] as String?,
+          toUserId: s['toUserId'] as String?,
+          fromUserName: s['fromUserName'] as String?,
+          toUserName: s['toUserName'] as String?,
+          amountPaise: paise,
+        );
+      }(),
   ]..sort((a, b) => b.at.compareTo(a.at));
   return items;
 }
 
 class GroupActivityView extends StatelessWidget {
-  const GroupActivityView({super.key, required this.loaded});
+  const GroupActivityView({
+    super.key,
+    required this.loaded,
+    this.currentUserId = '',
+    this.now,
+  });
   final GroupDetailLoaded loaded;
+  final String currentUserId;
+
+  /// Injectable clock (tests).
+  final DateTime? now;
+
+  Future<void> _reverse(BuildContext context, GroupActivityItem item) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final group = loaded.group;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Payment not received?'),
+        content: Text(
+            '${item.fromUserName} will owe you ${_money(group.currency, item.amount)} again. '
+            'This is recorded in the group and ${item.fromUserName} is told.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Mark as not received')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final error = await SettleCubit(locator(), locator(), locator())
+        .reverseSettlement(
+      groupId: group.id,
+      groupName: group.name,
+      settlementId: item.settlementId!,
+      payerId: item.fromUserId!,
+      payerName: item.fromUserName ?? '',
+      payeeId: item.toUserId!,
+      payeeName: item.toUserName ?? '',
+      amountPaise: item.amountPaise!,
+      currency: group.currency,
+    );
+    messenger.showSnackBar(SnackBar(
+        content: Text(error ?? 'Marked as not received. Balances updated.')));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -176,6 +277,7 @@ class GroupActivityView extends StatelessWidget {
           icon: Icons.history_rounded, label: 'No activity yet in this group');
     }
     final currency = loaded.group.currency;
+    final clock = now ?? DateTime.now();
     return PayPactCard(
       padding: EdgeInsets.zero,
       child: Column(
@@ -190,17 +292,25 @@ class GroupActivityView extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: items[i].isSettlement
-                        ? pt.positiveSoft
-                        : pt.surfaceAlt,
+                    color: items[i].isReversal
+                        ? pt.negativeSoft
+                        : items[i].isSettlement
+                            ? pt.positiveSoft
+                            : pt.surfaceAlt,
                     borderRadius: PayPactRadius.sm,
                   ),
                   child: Icon(
-                    items[i].isSettlement
-                        ? Icons.handshake_outlined
-                        : Icons.receipt_long_outlined,
+                    items[i].isReversal
+                        ? Icons.undo_rounded
+                        : items[i].isSettlement
+                            ? Icons.handshake_outlined
+                            : Icons.receipt_long_outlined,
                     size: 18,
-                    color: items[i].isSettlement ? pt.positive : pt.ink2,
+                    color: items[i].isReversal
+                        ? pt.negative
+                        : items[i].isSettlement
+                            ? pt.positive
+                            : pt.ink2,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -212,17 +322,39 @@ class GroupActivityView extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: PayPactTypography.bodyMd.copyWith(
-                              color: pt.ink, fontWeight: FontWeight.w600)),
-                      Text('${items[i].subtitle} · ${_when(items[i].at)}',
+                              color: pt.ink,
+                              fontWeight: FontWeight.w600,
+                              decoration: items[i].reversed
+                                  ? TextDecoration.lineThrough
+                                  : null)),
+                      Text(
+                          '${items[i].reversed ? 'Reversed' : items[i].subtitle} · ${_when(items[i].at)}',
                           style: PayPactTypography.bodySm
                               .copyWith(color: pt.ink3)),
+                      if (items[i].canReverse(currentUserId, clock))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: GestureDetector(
+                            onTap: () => _reverse(context, items[i]),
+                            child: Text('Not received?',
+                                style: PayPactTypography.bodySm.copyWith(
+                                    color: pt.accent,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                        ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 10),
                 Text(_money(currency, items[i].amount),
                     style: PayPactTypography.bodyMd.copyWith(
-                        color: items[i].isSettlement ? pt.positive : pt.ink,
+                        color: items[i].reversed
+                            ? pt.ink3
+                            : items[i].isReversal
+                                ? pt.negative
+                                : items[i].isSettlement
+                                    ? pt.positive
+                                    : pt.ink,
                         fontWeight: FontWeight.w700)),
               ]),
             ),

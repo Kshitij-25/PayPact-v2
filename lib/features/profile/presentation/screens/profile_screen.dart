@@ -10,7 +10,11 @@ import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/spacing.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
+import 'package:paypact/core/services/photo_picker.dart';
+import 'package:paypact/features/auth/domain/entities/user_entity.dart';
 import 'package:paypact/features/profile/cubit/profile_cubit.dart';
+import 'package:paypact/features/profile/presentation/widgets/profile_sheets.dart';
+import 'package:paypact/widgets/photo_source_sheet.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -120,6 +124,27 @@ class _ProfileBody extends StatelessWidget {
     );
   }
 
+  Future<void> _changePhoto(BuildContext context, UserEntity me) async {
+    final cubit = context.read<ProfileCubit>();
+    final messenger = ScaffoldMessenger.of(context);
+    void report(String? error) {
+      if (error != null) messenger.showSnackBar(SnackBar(content: Text(error)));
+    }
+
+    final source = await choosePhotoSource(context,
+        allowRemove: me.photoUrl != null,
+        onRemove: () async => report(await cubit.updatePhoto(null)));
+    if (source == null) return;
+    try {
+      final bytes = await locator<PhotoPicker>()
+          .pickBytes(source, maxSide: 600, quality: 80);
+      if (bytes == null) return;
+      report(await cubit.updatePhoto(bytes));
+    } catch (_) {
+      report("Couldn't open the camera or photos.");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
@@ -171,6 +196,16 @@ class _ProfileBody extends StatelessWidget {
           final groupCount =
               state is ProfileLoaded ? state.groupCount : null;
           final saving = state is ProfileSaving;
+          final profileUser = switch (state) {
+            ProfileLoaded s => s.user,
+            ProfileSaving s => s.user,
+            _ => null,
+          };
+          final authUser = context.watch<AuthCubit>().state;
+          final me = profileUser ??
+              (authUser is AuthAuthenticated
+                  ? authUser.user
+                  : UserEntity(id: '', name: userName, email: userEmail));
 
           return Stack(
             children: [
@@ -213,15 +248,17 @@ class _ProfileBody extends StatelessWidget {
                           const Spacer(),
                           PpGlassIconButton(
                               icon: Icons.qr_code_2_rounded,
-                              onTap: () {}),
+                              label: 'Show my payment QR code',
+                              onTap: () => showReceiveQrSheet(
+                                  context,
+                                  me,
+                                  () => showPaymentMethodsSheet(context, me))),
                         ]),
                       ),
                       const SizedBox(height: 32),
                       Center(
                         child: GestureDetector(
-                          onTap: saving
-                              ? null
-                              : () => _showEditName(context, userName),
+                          onTap: saving ? null : () => _changePhoto(context, me),
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
@@ -232,7 +269,10 @@ class _ProfileBody extends StatelessWidget {
                                       color: pt.surface, width: 3),
                                   boxShadow: pt.shadowMd,
                                 ),
-                                child: PpAvatar(name: userName, size: 92),
+                                child: PpAvatar(
+                                    name: userName,
+                                    size: 92,
+                                    imageUrl: me.photoUrl),
                               ),
                               Positioned(
                                 right: 0,
@@ -247,7 +287,7 @@ class _ProfileBody extends StatelessWidget {
                                         color: pt.surface, width: 2),
                                   ),
                                   alignment: Alignment.center,
-                                  child: const Icon(Icons.edit_rounded,
+                                  child: const Icon(Icons.photo_camera_rounded,
                                       size: 14, color: Colors.white),
                                 ),
                               ),
@@ -330,9 +370,12 @@ class _ProfileBody extends StatelessWidget {
                                 const _EmailVerificationRow(),
                                 Divider(color: pt.border, height: 1),
                                 _Row(
-                                    icon: Icons.payments_outlined,
-                                    label: 'Payment methods',
-                                    sub: 'UPI · Wallet'),
+                                  icon: Icons.payments_outlined,
+                                  label: 'Payment methods',
+                                  sub: me.upiId ?? 'Add your UPI ID',
+                                  onTap: () =>
+                                      showPaymentMethodsSheet(context, me),
+                                ),
                               ]),
                             ),
                             const SizedBox(height: 18),

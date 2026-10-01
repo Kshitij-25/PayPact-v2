@@ -11,6 +11,7 @@ import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
+import 'package:paypact/features/group/presentation/widgets/group_settings_extras.dart';
 import 'package:paypact/features/group/presentation/widgets/invite_sheet.dart';
 import 'package:paypact/features/notification/domain/repositories/notification_prefs_repository.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
@@ -213,6 +214,15 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
                       const SizedBox(height: 28),
                       _InviteSection(group: group, currentUserId: currentUserId),
                       const SizedBox(height: 28),
+                      if (isAdmin) ...[
+                        GroupCustomiseSection(
+                          group: group,
+                          onChanged: () =>
+                              context.read<GroupSettingsCubit>().refresh(),
+                        ),
+                        const SizedBox(height: 28),
+                      ],
+                      GroupRecurringSection(group: group),
                       _PreferencesSection(
                         group: group,
                         isAdmin: isAdmin,

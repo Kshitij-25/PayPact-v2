@@ -7,6 +7,7 @@ class UserModel extends UserEntity {
     required super.name,
     required super.email,
     super.photoUrl,
+    super.upiId,
   });
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
@@ -16,6 +17,7 @@ class UserModel extends UserEntity {
       name: data['name'] as String? ?? '',
       email: data['email'] as String? ?? '',
       photoUrl: data['photoUrl'] as String?,
+      upiId: data['upiId'] as String?,
     );
   }
 
@@ -23,6 +25,7 @@ class UserModel extends UserEntity {
     return {
       'id': id,
       'name': name,
+      'nameLower': name.trim().toLowerCase(),
       'email': email,
       'photoUrl': photoUrl,
       'createdAt': FieldValue.serverTimestamp(),

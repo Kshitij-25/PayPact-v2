@@ -52,6 +52,15 @@ dependencies:
   google_fonts: ^8.1.0
   cupertino_icons: ^1.0.9
   package_info_plus: ^9.0.1
+  firebase_storage: ^13.6.0
+  firebase_crashlytics: ^5.4.0
+  firebase_analytics: ^12.6.0
+  firebase_app_check: ^0.4.8
+  image_picker: ^1.2.3
+  google_mlkit_text_recognition: ^0.17.1
+  local_auth: ^3.0.2
+  url_launcher: ^6.3.2
+  connectivity_plus: ^7.3.1
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +69,7 @@ dev_dependencies:
   mocktail: ^1.0.4
 
 flutter:
+  generate: true # localization (lib/l10n, l10n.yaml)
   config:
     # SPM integration breaks when the project path contains a space
     # ("Flutter Projects"); fall back to CocoaPods.

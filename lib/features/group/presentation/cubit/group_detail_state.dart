@@ -17,6 +17,9 @@ class GroupDetailLoaded extends GroupDetailState {
   /// Recorded settle-up payments (newest first), for the activity timeline.
   final List<Map<String, dynamic>> settlements;
 
+  /// Older expenses exist beyond the loaded page.
+  final bool canLoadMore;
+
   GroupDetailLoaded({
     required this.group,
     required this.expenses,
@@ -24,6 +27,7 @@ class GroupDetailLoaded extends GroupDetailState {
     required this.memberBalances,
     required this.globalMemberBalances,
     this.settlements = const [],
+    this.canLoadMore = false,
   });
 }
 

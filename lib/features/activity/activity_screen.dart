@@ -101,7 +101,9 @@ class _ActivityBody extends StatelessWidget {
                                   }),
                               const SizedBox(width: 10),
                               PpGlassIconButton(
-                                  icon: Icons.search_rounded, onTap: () {}),
+                                  icon: Icons.search_rounded,
+                                  onTap: () => context.push(
+                                      '${AppRoutes.search}?scope=expenses')),
                             ]),
                           ),
                           Padding(
@@ -314,10 +316,8 @@ class _WebActivityRow extends StatelessWidget {
 
     return GestureDetector(
       onTap: item.expenseId != null
-          ? () => context.push(
-                '/expense/${item.expenseId}',
-                extra: item.groupId != null ? {'groupId': item.groupId} : null,
-              )
+          ? () => context
+              .push(AppRoutes.expense(item.expenseId!, item.groupId))
           : item.groupId != null
               ? () => context.push('/group/${item.groupId}')
               : null,
@@ -433,10 +433,8 @@ class _Tile extends StatelessWidget {
 
     return GestureDetector(
       onTap: item.expenseId != null
-          ? () => context.push(
-                '/expense/${item.expenseId}',
-                extra: item.groupId != null ? {'groupId': item.groupId} : null,
-              )
+          ? () => context
+              .push(AppRoutes.expense(item.expenseId!, item.groupId))
           : item.groupId != null
               ? () => context.push('/group/${item.groupId}')
               : null,

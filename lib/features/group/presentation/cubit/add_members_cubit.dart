@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:paypact/features/group/data/user_search_service.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
 
@@ -9,11 +9,11 @@ part 'add_members_state.dart';
 
 class AddMembersCubit extends Cubit<AddMembersState> {
   final GroupRepository _groupRepo;
-  final FirebaseFirestore _firestore;
+  final UserSearchService _search;
   final NotificationsRepository _notifRepo;
   Timer? _debounce;
 
-  AddMembersCubit(this._groupRepo, this._firestore, this._notifRepo)
+  AddMembersCubit(this._groupRepo, this._search, this._notifRepo)
       : super(AddMembersIdle([]));
 
   @override
@@ -36,41 +36,16 @@ class AddMembersCubit extends Cubit<AddMembersState> {
 
   Future<void> _runSearch(String q, Set<String> existingMemberIds) async {
     try {
-      final results = <UserResult>[];
-
-      // email exact match
-      final emailSnap = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: q.toLowerCase())
-          .limit(5)
-          .get();
-      for (final d in emailSnap.docs) {
-        if (!existingMemberIds.contains(d.id)) {
-          results.add(UserResult.fromDoc(d));
-        }
-      }
-
-      // name prefix search if no email hits
-      if (results.isEmpty) {
-        final end = '$q';
-        final nameSnap = await _firestore
-            .collection('users')
-            .orderBy('name')
-            .startAt([q])
-            .endAt([end])
-            .limit(10)
-            .get();
-        for (final d in nameSnap.docs) {
-          if (!existingMemberIds.contains(d.id) &&
-              !results.any((r) => r.id == d.id)) {
-            results.add(UserResult.fromDoc(d));
-          }
-        }
-      }
-
-      emit(AddMembersSearchDone(q, results));
+      final hits =
+          await _search.search(q, excludeIds: existingMemberIds);
+      if (isClosed) return;
+      emit(AddMembersSearchDone(q, [
+        for (final h in hits)
+          UserResult(id: h.id, name: h.name, email: h.email),
+      ]));
     } catch (e) {
-      emit(AddMembersError(e.toString()));
+      if (isClosed) return;
+      emit(AddMembersError("Couldn't search right now. Try again."));
     }
   }
 

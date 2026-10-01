@@ -16,6 +16,10 @@ class ExpenseModel extends ExpenseEntity {
     required super.splits,
     required super.createdAt,
     required super.createdById,
+    super.date,
+    super.note,
+    super.receiptUrl,
+    super.recurringId,
   });
 
   factory ExpenseModel.fromFirestore(DocumentSnapshot doc, String groupId) {
@@ -31,6 +35,8 @@ class ExpenseModel extends ExpenseEntity {
     }).toList();
 
     final baseAmount = (data['amount'] as num?)?.toDouble() ?? 0;
+    final createdAt =
+        (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
 
     return ExpenseModel(
       id: doc.id,
@@ -45,9 +51,12 @@ class ExpenseModel extends ExpenseEntity {
       paidById: data['paidById'] as String? ?? '',
       paidByName: data['paidByName'] as String? ?? '',
       splits: splits,
-      createdAt:
-          (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: createdAt,
       createdById: data['createdById'] as String? ?? '',
+      date: (data['date'] as Timestamp?)?.toDate() ?? createdAt,
+      note: data['note'] as String?,
+      receiptUrl: data['receiptUrl'] as String?,
+      recurringId: data['recurringId'] as String?,
     );
   }
 
@@ -69,6 +78,9 @@ class ExpenseModel extends ExpenseEntity {
                   'amount': s.amount,
                 })
             .toList(),
+        'date': Timestamp.fromDate(date),
+        'note': note,
+        'receiptUrl': receiptUrl,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -90,5 +102,9 @@ class ExpenseModel extends ExpenseEntity {
             .toList(),
         'createdAt': FieldValue.serverTimestamp(),
         'createdById': createdById,
+        'date': Timestamp.fromDate(date),
+        'note': note,
+        'receiptUrl': receiptUrl,
+        if (recurringId != null) 'recurringId': recurringId,
       };
 }

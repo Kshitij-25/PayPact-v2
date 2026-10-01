@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:paypact/features/notification/domain/notification_routing.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
@@ -238,9 +239,14 @@ class _NotifTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final pt = context.pt;
     return GestureDetector(
-      onTap: isRead
-          ? null
-          : () => context.read<NotificationsCubit>().markRead(notif.id),
+      onTap: () {
+        if (!isRead) context.read<NotificationsCubit>().markRead(notif.id);
+        // Open what the notification is about (the group, or the inbox for
+        // events where the group is gone).
+        final route =
+            routeForNotification(type: notif.type, groupId: notif.groupId);
+        if (route != '/notifications') context.push(route);
+      },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(

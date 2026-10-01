@@ -91,7 +91,9 @@ class _GroupsBody extends StatelessWidget {
                                       color: pt.ink3, letterSpacing: 1.6)),
                               const Spacer(),
                               PpGlassIconButton(
-                                  icon: Icons.search_rounded, onTap: () {}),
+                                  icon: Icons.search_rounded,
+                                  onTap: () => context
+                                      .push('${AppRoutes.search}?scope=groups')),
                             ]),
                           ),
                           Padding(

@@ -1,3 +1,5 @@
+import 'package:paypact/core/locale_cubit.dart';
+import 'package:paypact/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +15,7 @@ import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/notification/domain/notification_prefs.dart';
 import 'package:paypact/features/notification/domain/repositories/notification_prefs_repository.dart';
+import 'package:paypact/features/profile/presentation/widgets/privacy_section.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -127,7 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         icon: Icons.arrow_back_rounded,
                         onTap: () => context.pop()),
                     const Spacer(),
-                    Text('Settings',
+                    Text(context.l10n.settingsTitle,
                         style: PayPactTypography.bodyMd.copyWith(
                             color: pt.ink, fontWeight: FontWeight.w600)),
                     const Spacer(),
@@ -156,7 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       // Appearance
                       PpSectionLabel(
-                          label: 'APPEARANCE', padding: EdgeInsets.zero),
+                          label: context.l10n.settingsAppearance, padding: EdgeInsets.zero),
                       const SizedBox(height: 10),
                       PayPactCard(
                         padding: const EdgeInsets.all(16),
@@ -221,9 +224,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 18),
 
+                      // Language
+                      PpSectionLabel(
+                          label: context.l10n.settingsLanguage,
+                          padding: EdgeInsets.zero),
+                      const SizedBox(height: 10),
+                      const _LanguageCard(),
+                      const SizedBox(height: 18),
+
                       // Default currency
                       PpSectionLabel(
-                          label: 'CURRENCY', padding: EdgeInsets.zero),
+                          label: context.l10n.settingsCurrency, padding: EdgeInsets.zero),
                       const SizedBox(height: 10),
                       GestureDetector(
                         onTap: _pickCurrency,
@@ -249,37 +260,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       // Notifications
                       PpSectionLabel(
-                          label: 'NOTIFICATIONS',
+                          label: context.l10n.settingsNotifications,
                           padding: EdgeInsets.zero),
                       const SizedBox(height: 10),
                       PayPactCard(
                         padding: EdgeInsets.zero,
                         child: Column(children: [
                           _ToggleRow(
-                            label: 'Settlement requests',
-                            sub: 'Someone settles up with you',
+                            label: context.l10n.notifSettlements,
+                            sub: context.l10n.notifSettlementsSub,
                             on: _notifState['settlements']!,
                             onChanged: (v) => _setNotif('settlements', v),
                           ),
                           Divider(color: pt.border, height: 1),
                           _ToggleRow(
-                            label: 'Smart nudges',
-                            sub:
-                                'Gentle reminders about open balances',
+                            label: context.l10n.notifNudges,
+                            sub: context.l10n.notifNudgesSub,
                             on: _notifState['nudges']!,
                             onChanged: (v) => _setNotif('nudges', v),
                           ),
                           Divider(color: pt.border, height: 1),
                           _ToggleRow(
-                            label: 'New expenses',
-                            sub: 'When others add to your groups',
+                            label: context.l10n.notifExpenses,
+                            sub: context.l10n.notifExpensesSub,
                             on: _notifState['expenses']!,
                             onChanged: (v) => _setNotif('expenses', v),
                           ),
                           Divider(color: pt.border, height: 1),
                           _ToggleRow(
-                            label: 'Weekly digest',
-                            sub: 'Sundays · 8 PM',
+                            label: context.l10n.notifDigest,
+                            sub: context.l10n.notifDigestSub,
                             on: _notifState['digest']!,
                             onChanged: (v) => _setNotif('digest', v),
                           ),
@@ -289,40 +299,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       // Privacy
                       PpSectionLabel(
-                          label: 'PRIVACY & DATA',
+                          label: context.l10n.settingsPrivacy,
                           padding: EdgeInsets.zero),
                       const SizedBox(height: 10),
-                      PayPactCard(
-                        padding: EdgeInsets.zero,
-                        child: Column(children: [
-                          _RowControl(
-                            icon: Icons.lock_outline_rounded,
-                            label: 'App lock',
-                            trailing: _ValueChevron('Face ID'),
-                          ),
-                          Divider(color: pt.border, height: 1),
-                          _RowControl(
-                            icon: Icons.donut_small_rounded,
-                            label: 'Anonymous usage data',
-                            trailing: const _StaticToggle(on: false),
-                          ),
-                          Divider(color: pt.border, height: 1),
-                          _RowControl(
-                            icon: Icons.mail_outline_rounded,
-                            label: 'Export all data',
-                            trailing: Icon(Icons.chevron_right_rounded,
-                                color: pt.ink3),
-                          ),
-                          Divider(color: pt.border, height: 1),
-                          _RowControl(
-                            icon: Icons.delete_outline_rounded,
-                            label: 'Delete account',
-                            negative: true,
-                            trailing: Icon(Icons.chevron_right_rounded,
-                                color: pt.ink3),
-                          ),
-                        ]),
-                      ),
+                      const PrivacySection(),
                       const SizedBox(height: 24),
                       Center(
                         child: FutureBuilder<PackageInfo>(
@@ -469,12 +449,10 @@ class _RowControl extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.trailing,
-    this.negative = false,
   });
   final IconData icon;
   final String label;
   final Widget trailing;
-  final bool negative;
 
   @override
   Widget build(BuildContext context) {
@@ -486,19 +464,17 @@ class _RowControl extends StatelessWidget {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: negative ? pt.negativeSoft : pt.surfaceAlt,
+            color: pt.surfaceAlt,
             borderRadius: PayPactRadius.sm,
           ),
           alignment: Alignment.center,
-          child: Icon(icon,
-              size: 16, color: negative ? pt.negative : pt.ink2),
+          child: Icon(icon, size: 16, color: pt.ink2),
         ),
         const SizedBox(width: 14),
         Expanded(
           child: Text(label,
-              style: PayPactTypography.bodyMd.copyWith(
-                  color: negative ? pt.negative : pt.ink,
-                  fontWeight: FontWeight.w600)),
+              style: PayPactTypography.bodyMd
+                  .copyWith(color: pt.ink, fontWeight: FontWeight.w600)),
         ),
         trailing,
       ]),
@@ -608,40 +584,44 @@ class _CurrencyPickerSheet extends StatelessWidget {
   }
 }
 
-class _StaticToggle extends StatelessWidget {
-  const _StaticToggle({required this.on});
-  final bool on;
+
+
+/// System default / English / हिन्दी.
+class _LanguageCard extends StatelessWidget {
+  const _LanguageCard();
 
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
-    return Container(
-      width: 42,
-      height: 24,
-      decoration: BoxDecoration(
-        color: on ? pt.accent : pt.surfaceAlt,
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: on ? pt.accent : pt.border),
-      ),
-      child: AnimatedAlign(
-        alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          margin: const EdgeInsets.all(2),
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  offset: const Offset(0, 2),
-                  blurRadius: 4),
-            ],
+    final cubit = context.read<LocaleCubit>();
+    final current = context.watch<LocaleCubit>().state;
+    final options = <(Locale?, String)>[
+      (null, context.l10n.languageSystem),
+      (const Locale('en'), context.l10n.languageEnglish),
+      (const Locale('hi'), context.l10n.languageHindi),
+    ];
+    return PayPactCard(
+      padding: EdgeInsets.zero,
+      child: Column(children: [
+        for (var i = 0; i < options.length; i++) ...[
+          if (i > 0) Divider(color: pt.border, height: 1),
+          InkWell(
+            onTap: () => cubit.set(options[i].$1),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(children: [
+                Expanded(
+                  child: Text(options[i].$2,
+                      style: PayPactTypography.bodyMd.copyWith(
+                          color: pt.ink, fontWeight: FontWeight.w600)),
+                ),
+                if (current?.languageCode == options[i].$1?.languageCode)
+                  Icon(Icons.check_rounded, color: pt.accent),
+              ]),
+            ),
           ),
-        ),
-      ),
+        ],
+      ]),
     );
   }
 }

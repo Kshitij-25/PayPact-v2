@@ -12,7 +12,11 @@ const kNotifDefaults = <String, bool>{
 /// Which preference governs a notification [type]. Null means the type is
 /// always delivered (membership and group events).
 String? notifCategoryFor(String type) => switch (type) {
-      'expense_added' || 'expense_updated' || 'expense_deleted' => 'expenses',
+      'expense_added' ||
+      'expense_updated' ||
+      'expense_deleted' ||
+      'expense_comment' =>
+        'expenses',
       'settlement' => 'settlements',
       'nudge' => 'nudges',
       'digest' => 'digest',

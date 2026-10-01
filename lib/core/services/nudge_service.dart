@@ -18,6 +18,50 @@ class NudgeService {
   String _key(String actorId, SmartNudgeData n) =>
       'nudge_${actorId}_${n.groupId}_${n.fromUserId}';
 
+  static const reminderCooldown = Duration(hours: 24);
+
+  String _remindKey(String actorId, String expenseId, String targetId) =>
+      'remind_${actorId}_${expenseId}_$targetId';
+
+  /// Whether [targetId] can be reminded about [expenseId] again (once a day).
+  bool canRemind(String actorId, String expenseId, String targetId) {
+    final last = _prefs.getInt(_remindKey(actorId, expenseId, targetId));
+    if (last == null) return true;
+    return _now().difference(DateTime.fromMillisecondsSinceEpoch(last)) >=
+        reminderCooldown;
+  }
+
+  /// Reminds [targetId] about an expense they still owe a share of. The
+  /// recipient's "Smart nudges" preference decides whether it is delivered.
+  Future<void> remindAbout({
+    required String expenseId,
+    required String expenseTitle,
+    required String groupId,
+    required String groupName,
+    required String currency,
+    required double amountOwed,
+    required String targetId,
+    required String actorId,
+    required String actorName,
+  }) async {
+    final sym = currencySymbol(currency);
+    final amountText =
+        '$sym${amountOwed.toStringAsFixed(amountOwed.truncateToDouble() == amountOwed ? 0 : 2)}';
+    final first = actorName.trim().split(' ').first;
+    await _notifRepo.push(
+      targetUserId: targetId,
+      type: 'nudge',
+      title: '${first.isEmpty ? 'A friend' : first} sent a gentle reminder',
+      body: 'You still owe $amountText for "$expenseTitle" in "$groupName".',
+      groupId: groupId,
+      groupName: groupName,
+      actorId: actorId,
+      actorName: actorName,
+    );
+    await _prefs.setInt(_remindKey(actorId, expenseId, targetId),
+        _now().millisecondsSinceEpoch);
+  }
+
   bool canNudge(String actorId, SmartNudgeData nudge) {
     final last = _prefs.getInt(_key(actorId, nudge));
     if (last == null) return true;

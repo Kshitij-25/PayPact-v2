@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,6 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
+import 'package:paypact/core/services/photo_picker.dart';
+import 'package:paypact/core/services/receipt_scanner.dart';
+import 'package:paypact/core/services/storage_service.dart';
 import 'package:paypact/core/utils/default_currency.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
@@ -13,6 +17,8 @@ import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
+import 'package:paypact/features/expense/domain/entities/expense_extras.dart';
+import 'package:paypact/features/expense/domain/split_allocator.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/expense/presentation/cubit/add_expense_cubit.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
@@ -66,7 +72,21 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
   String _splitType = 'equally';
   Map<String, double> _customSplits = {};
 
-  bool _useYesterday = false;
+  /// When the money was spent (defaults to now; can be back-dated).
+  DateTime _date = DateTime.now();
+
+  final _noteCtrl = TextEditingController();
+  bool _showNote = false;
+
+  /// A receipt photo chosen this session (uploaded on save) or already stored.
+  Uint8List? _receiptBytes;
+  String? _receiptUrl;
+  String? _replacedReceiptUrl; // old file to remove once the edit is saved
+  bool _scanning = false;
+  bool _uploading = false;
+
+  /// Make this a recurring expense (new expenses only).
+  RecurrenceInterval? _repeat;
 
   /// The expense being edited; null when creating.
   ExpenseEntity? _existing;
@@ -81,6 +101,13 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     _CatChoice('Fun', '🎬', PpCategory.entertainment, 'entertainment'),
     _CatChoice('Other', '✨', PpCategory.other, 'other'),
   ];
+
+  /// Built-in categories plus any the group's admins added.
+  List<_CatChoice> get _allCats => [
+        ..._cats,
+        for (final c in _group?.customCategories ?? const <CustomCategory>[])
+          _CatChoice(c.name, c.emoji, PpCategory.other, c.id),
+      ];
 
   @override
   void initState() {
@@ -152,6 +179,10 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
       _selectedCategory = expense.category;
       _paidById = expense.paidById;
       _paidByName = expense.paidByName;
+      _date = expense.date;
+      _noteCtrl.text = expense.note ?? '';
+      _showNote = (expense.note ?? '').isNotEmpty;
+      _receiptUrl = expense.receiptUrl;
       _splitType = isEqual ? 'equally' : 'exact';
       _customSplits = isEqual
           ? {}
@@ -162,63 +193,42 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
   @override
   void dispose() {
     _titleCtrl.dispose();
+    _noteCtrl.dispose();
     _amountCtrl.dispose();
     super.dispose();
   }
 
   double get _parsedAmount => double.tryParse(_amountCtrl.text) ?? 0;
 
+  /// The split in whole minor units, so the shares always add up to the total
+  /// (₹100 three ways is 33.34 / 33.33 / 33.33, never 99.99).
   List<ExpenseSplitEntity> _buildUiSplits(double amount) {
     final members = _group?.memberNames ?? {};
     if (members.isEmpty) return [];
 
+    final ids = members.keys.toList();
+    final total = toMinor(amount);
+    final List<int> minors;
     switch (_splitType) {
-      case 'equally':
-        final each = amount / members.length;
-        return members.entries
-            .map((e) => ExpenseSplitEntity(
-                  userId: e.key,
-                  userName: e.value,
-                  amount: double.parse(each.toStringAsFixed(2)),
-                ))
-            .toList();
       case 'exact':
-        return members.entries
-            .map((e) => ExpenseSplitEntity(
-                  userId: e.key,
-                  userName: e.value,
-                  amount: _customSplits[e.key] ?? 0,
-                ))
-            .toList();
+        minors = [for (final id in ids) toMinor(_customSplits[id] ?? 0)];
       case 'percent':
-        return members.entries
-            .map((e) => ExpenseSplitEntity(
-                  userId: e.key,
-                  userName: e.value,
-                  amount: double.parse(
-                      (amount * (_customSplits[e.key] ?? 0) / 100)
-                          .toStringAsFixed(2)),
-                ))
-            .toList();
+        minors = allocateByWeights(
+            total, [for (final id in ids) _customSplits[id] ?? 0]);
       case 'shares':
-        final totalShares =
-            members.keys.fold(0.0, (s, id) => s + (_customSplits[id] ?? 1));
-        return members.entries
-            .map((e) {
-              final shares = _customSplits[e.key] ?? 1;
-              return ExpenseSplitEntity(
-                userId: e.key,
-                userName: e.value,
-                amount: totalShares > 0
-                    ? double.parse(
-                        (amount * shares / totalShares).toStringAsFixed(2))
-                    : 0,
-              );
-            })
-            .toList();
+        minors = allocateByWeights(
+            total, [for (final id in ids) _customSplits[id] ?? 1]);
       default:
-        return [];
+        minors = allocateEqually(total, ids.length);
     }
+    return [
+      for (var i = 0; i < ids.length; i++)
+        ExpenseSplitEntity(
+          userId: ids[i],
+          userName: members[ids[i]]!,
+          amount: fromMinor(minors[i]),
+        ),
+    ];
   }
 
   String _splitLabel() {
@@ -366,6 +376,220 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     await _loadGroup();
   }
 
+  // ── Date, receipt, note ───────────────────────────────────────────────────
+
+  bool get _isToday {
+    final n = DateTime.now();
+    return _date.year == n.year && _date.month == n.month && _date.day == n.day;
+  }
+
+  String _dateLabel() {
+    if (_isToday) return 'Today';
+    final y = DateTime.now().subtract(const Duration(days: 1));
+    if (_date.year == y.year && _date.month == y.month && _date.day == y.day) {
+      return 'Yesterday';
+    }
+    return DateFormat('MMM d').format(_date);
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date.isAfter(now) ? now : _date,
+      firstDate: DateTime(2000),
+      lastDate: now.add(const Duration(days: 1)),
+    );
+    if (picked == null || !mounted) return;
+    // Keep a time so same-day expenses still order sensibly.
+    final sameDayAsNow = picked.year == now.year &&
+        picked.month == now.month &&
+        picked.day == now.day;
+    setState(() => _date = DateTime(picked.year, picked.month, picked.day,
+        sameDayAsNow ? now.hour : 12, sameDayAsNow ? now.minute : 0));
+  }
+
+  Future<PhotoSource?> _chooseSource() async {
+    if (!PhotoPicker.cameraSupported) return PhotoSource.gallery;
+    final pt = context.pt;
+    return showModalBottomSheet<PhotoSource>(
+      context: context,
+      backgroundColor: pt.surface,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text('Take a photo'),
+            onTap: () => Navigator.pop(ctx, PhotoSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Choose from library'),
+            onTap: () => Navigator.pop(ctx, PhotoSource.gallery),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  /// Picks a receipt photo; with [scan] it's also read on-device and used to
+  /// pre-fill the amount, description and date (only fields left empty).
+  Future<void> _addReceipt({required bool scan}) async {
+    final source = await _chooseSource();
+    if (source == null || !mounted) return;
+    setState(() => _scanning = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final file = await locator<PhotoPicker>().pick(source);
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      ReceiptScan? result;
+      if (scan && ReceiptScanner.supported) {
+        result = await ReceiptScanner().scanFile(file.path);
+      }
+      if (!mounted) return;
+      setState(() {
+        _receiptBytes = bytes;
+        if (_receiptUrl != null) _replacedReceiptUrl ??= _receiptUrl;
+        _receiptUrl = null;
+        if (result != null) {
+          final total = result.total;
+          if (total != null && _parsedAmount <= 0) {
+            _amountCtrl.text = total.truncateToDouble() == total
+                ? total.toStringAsFixed(0)
+                : total.toStringAsFixed(2);
+          }
+          final merchant = result.merchant;
+          if (merchant != null && _titleCtrl.text.trim().isEmpty) {
+            _titleCtrl.text = merchant;
+          }
+          final date = result.date;
+          if (date != null) _date = date;
+        }
+      });
+      messenger.showSnackBar(SnackBar(
+        content: Text(!scan
+            ? 'Receipt attached.'
+            : !ReceiptScanner.supported
+                ? 'Receipt attached. Scanning is available in the mobile app.'
+                : (result == null || result.isEmpty)
+                    ? "Receipt attached, but it couldn't be read — enter the details yourself."
+                    : 'Filled in from your receipt — please check it looks right.'),
+      ));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text("Couldn't open the camera or photos.")));
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  void _removeReceipt() => setState(() {
+        if (_receiptUrl != null) _replacedReceiptUrl ??= _receiptUrl;
+        _receiptBytes = null;
+        _receiptUrl = null;
+      });
+
+  bool get _hasReceipt => _receiptBytes != null || _receiptUrl != null;
+
+  /// Receipt preview, note and repeat controls — shared by the phone sheet and
+  /// the web modal.
+  Widget _extrasSection(PayPactThemeExtension pt, {double hPad = 24}) {
+    final showNote = _showNote || _noteCtrl.text.isNotEmpty;
+    if (!_hasReceipt && !showNote && _isEdit) return const SizedBox.shrink();
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: hPad),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_hasReceipt) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: pt.surface,
+                borderRadius: PayPactRadius.md,
+                border: Border.all(color: pt.border),
+              ),
+              child: Row(children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: _receiptBytes != null
+                        ? Image.memory(_receiptBytes!, fit: BoxFit.cover)
+                        : Image.network(_receiptUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                const Icon(Icons.receipt_long_outlined)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text('Receipt attached',
+                      style: PayPactTypography.bodyMd.copyWith(
+                          color: pt.ink, fontWeight: FontWeight.w600)),
+                ),
+                IconButton(
+                  tooltip: 'Remove receipt',
+                  onPressed: _removeReceipt,
+                  icon: Icon(Icons.close_rounded, color: pt.ink3),
+                ),
+              ]),
+            ),
+          ],
+          if (showNote) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteCtrl,
+              minLines: 1,
+              maxLines: 3,
+              maxLength: 500,
+              onChanged: (_) => setState(() {}),
+              style: PayPactTypography.bodyMd.copyWith(color: pt.ink),
+              decoration: InputDecoration(
+                hintText: 'Add a note',
+                prefixIcon: Icon(Icons.notes_rounded, size: 18, color: pt.ink2),
+                filled: true,
+                fillColor: pt.surface,
+                border: OutlineInputBorder(
+                    borderRadius: PayPactRadius.md,
+                    borderSide: BorderSide(color: pt.borderStrong)),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: PayPactRadius.md,
+                    borderSide: BorderSide(color: pt.borderStrong)),
+              ),
+            ),
+          ],
+          if (!_isEdit) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Icon(Icons.repeat_rounded, size: 18, color: pt.ink2),
+              const SizedBox(width: 8),
+              Text('Repeat',
+                  style: PayPactTypography.bodyMd.copyWith(
+                      color: pt.ink, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 12),
+              for (final opt in const [
+                (null, 'Never'),
+                (RecurrenceInterval.weekly, 'Weekly'),
+                (RecurrenceInterval.monthly, 'Monthly'),
+              ]) ...[
+                ChoiceChip(
+                  label: Text(opt.$2),
+                  selected: _repeat == opt.$1,
+                  onSelected: (_) => setState(() => _repeat = opt.$1),
+                ),
+                const SizedBox(width: 6),
+              ],
+            ]),
+          ],
+        ],
+      ),
+    );
+  }
+
   void _pickPaidBy() {
     final members = _group?.memberNames ?? {};
     if (members.isEmpty) return;
@@ -418,6 +642,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     return BlocConsumer<AddExpenseCubit, AddExpenseState>(
       listener: (context, state) {
         if (state is AddExpenseSuccess) {
+          locator<StorageService>().deleteByUrl(_staleReceiptUrl);
           context.pop();
         } else if (state is AddExpenseError) {
           ScaffoldMessenger.of(context)
@@ -425,7 +650,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
         }
       },
       builder: (context, state) {
-        final loading = state is AddExpenseLoading;
+        final loading = state is AddExpenseLoading || _uploading;
         final parsedAmount = _parsedAmount;
         final selectedCur = currencyOf(_selectedCurrency);
         final isForeign = _selectedCurrency != _groupCurrency;
@@ -625,16 +850,16 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
                     children: [
-                      for (var i = 0; i < _cats.length; i++) ...[
+                      for (var i = 0; i < _allCats.length; i++) ...[
                         GestureDetector(
                           onTap: () => setState(
-                              () => _selectedCategory = _cats[i].catId),
+                              () => _selectedCategory = _allCats[i].catId),
                           child: _CategoryChip(
-                              c: _cats[i],
+                              c: _allCats[i],
                               selected:
-                                  _selectedCategory == _cats[i].catId),
+                                  _selectedCategory == _allCats[i].catId),
                         ),
-                        if (i < _cats.length - 1)
+                        if (i < _allCats.length - 1)
                           const SizedBox(width: 8),
                       ],
                     ],
@@ -737,22 +962,34 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                     children: [
                       _QuickChip(
                         icon: Icons.calendar_today_rounded,
-                        label: _useYesterday ? 'Yesterday' : 'Today',
-                        active: _useYesterday,
+                        label: _dateLabel(),
+                        active: !_isToday,
                         pt: pt,
-                        onTap: () =>
-                            setState(() => _useYesterday = !_useYesterday),
+                        onTap: _pickDate,
                       ),
                       const SizedBox(width: 8),
                       _QuickChip(
                         icon: Icons.document_scanner_outlined,
-                        label: 'Scan receipt',
+                        label: _scanning ? 'Reading…' : 'Scan receipt',
+                        active: _hasReceipt,
+                        pt: pt,
+                        onTap: _scanning ? () {} : () => _addReceipt(scan: true),
+                      ),
+                      const SizedBox(width: 8),
+                      _QuickChip(
+                        icon: Icons.attach_file_rounded,
+                        label: 'Attach photo',
                         active: false,
                         pt: pt,
-                        onTap: () => ScaffoldMessenger.of(context)
-                            .showSnackBar(const SnackBar(
-                                content:
-                                    Text('Scan receipt — coming soon'))),
+                        onTap: _scanning ? () {} : () => _addReceipt(scan: false),
+                      ),
+                      const SizedBox(width: 8),
+                      _QuickChip(
+                        icon: Icons.notes_rounded,
+                        label: 'Note',
+                        active: _showNote || _noteCtrl.text.isNotEmpty,
+                        pt: pt,
+                        onTap: () => setState(() => _showNote = !_showNote),
                       ),
                       const SizedBox(width: 8),
                       _QuickChip(
@@ -765,6 +1002,8 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                     ],
                   ),
                 ),
+
+                _extrasSection(pt),
 
                 // Smart split banner
                 if (parsedAmount > 0 && smartText.isNotEmpty) ...[
@@ -799,7 +1038,11 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: PayPactButton(
                     onPressed: loading ? null : _save,
-                    label: loading ? 'Saving…' : 'Save expense',
+                    label: _uploading
+                        ? 'Uploading receipt…'
+                        : loading
+                            ? 'Saving…'
+                            : 'Save expense',
                     variant: PayPactButtonVariant.accent,
                     size: PayPactButtonSize.large,
                     isFullWidth: true,
@@ -864,36 +1107,73 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                 "The split doesn't add up to the total — adjust the split.")));
         return;
       }
-      context.read<AddExpenseCubit>().updateExpense(
-            existing: existing,
-            groupCurrency: _groupCurrency,
-            groupName: _group!.name,
-            title: _titleCtrl.text,
-            amount: parsedAmount,
-            originalCurrency: _selectedCurrency,
-            category: _selectedCategory,
-            paidById: _paidById,
-            paidByName: _paidByName,
-            splits: uiSplits,
-            currentUserId: authState.user.id,
-            currentUserName: authState.user.name,
-          );
+    }
+
+    // Upload a newly chosen receipt first, so the expense is saved with its
+    // link (and nothing is saved if the upload fails).
+    String? receiptUrl = _receiptUrl;
+    if (_receiptBytes != null) {
+      setState(() => _uploading = true);
+      try {
+        receiptUrl =
+            await locator<StorageService>().uploadReceipt(gid, _receiptBytes!);
+      } catch (_) {
+        if (mounted) {
+          setState(() => _uploading = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text("Couldn't upload the receipt. Check your connection and try again.")));
+        }
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _uploading = false);
+    }
+    _staleReceiptUrl = _replacedReceiptUrl;
+
+    final cubit = context.read<AddExpenseCubit>();
+    if (_isEdit) {
+      cubit.updateExpense(
+        existing: existing!,
+        groupCurrency: _groupCurrency,
+        groupName: _group!.name,
+        title: _titleCtrl.text,
+        amount: parsedAmount,
+        originalCurrency: _selectedCurrency,
+        category: _selectedCategory,
+        paidById: _paidById,
+        paidByName: _paidByName,
+        splits: uiSplits,
+        currentUserId: authState.user.id,
+        currentUserName: authState.user.name,
+        date: _date,
+        note: _noteCtrl.text,
+        receiptUrl: receiptUrl,
+      );
       return;
     }
 
-    context.read<AddExpenseCubit>().saveExpense(
-          groupId: gid,
-          groupCurrency: _groupCurrency,
-          title: _titleCtrl.text,
-          amount: parsedAmount,
-          originalCurrency: _selectedCurrency,
-          category: _selectedCategory,
-          paidById: _paidById,
-          paidByName: _paidByName,
-          splits: uiSplits,
-          currentUserId: authState.user.id,
-        );
+    cubit.saveExpense(
+      groupId: gid,
+      groupCurrency: _groupCurrency,
+      groupName: _group?.name ?? '',
+      title: _titleCtrl.text,
+      amount: parsedAmount,
+      originalCurrency: _selectedCurrency,
+      category: _selectedCategory,
+      paidById: _paidById,
+      paidByName: _paidByName,
+      splits: uiSplits,
+      currentUserId: authState.user.id,
+      date: _date,
+      note: _noteCtrl.text,
+      receiptUrl: receiptUrl,
+      repeat: _repeat,
+    );
   }
+
+  /// A receipt that was replaced or removed during an edit; deleted from
+  /// storage only after the expense saved successfully.
+  String? _staleReceiptUrl;
 
 // ─────────────────────────────────────────────────────────────────────
 // Web modal (desktop only)
@@ -912,11 +1192,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     final pt = context.pt;
     final liveSplits =
         parsedAmount > 0 ? _buildUiSplits(parsedAmount) : <ExpenseSplitEntity>[];
-    final now = DateTime.now();
-    final yesterday = now.subtract(const Duration(days: 1));
-    final dateLabel = _useYesterday
-        ? 'Yesterday · ${DateFormat('MMM d').format(yesterday)}'
-        : 'Today · ${DateFormat('MMM d').format(now)}';
+    final dateLabel = '${_dateLabel()} · ${DateFormat('MMM d').format(_date)}';
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -1003,10 +1279,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
 
   Widget _webHeader(
       BuildContext context, PayPactThemeExtension pt) {
-    final now = DateTime.now();
-    final d = _useYesterday
-        ? now.subtract(const Duration(days: 1))
-        : now;
+    final d = _date;
     final subtitle = _group != null
         ? '${_group!.name} · ${DateFormat('MMM d').format(d)} · saved as you type'
         : 'saved as you type';
@@ -1181,7 +1454,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final cat in _cats)
+            for (final cat in _allCats)
               GestureDetector(
                 onTap: () =>
                     setState(() => _selectedCategory = cat.catId),
@@ -1210,8 +1483,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                     leading: Icon(Icons.calendar_today_outlined,
                         size: 14, color: pt.ink2),
                     label: dateLabel,
-                    onTap: () => setState(
-                        () => _useYesterday = !_useYesterday),
+                    onTap: _pickDate,
                   ),
                 ],
               ),
@@ -1320,6 +1592,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
             ),
           ],
         ),
+        _extrasSection(pt, hPad: 0),
       ],
     );
   }
@@ -1418,17 +1691,15 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
           _WebFooterBtn(
             pt: pt,
             icon: Icons.photo_camera_outlined,
-            label: 'Scan receipt',
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Scan receipt — coming soon'))),
+            label: _scanning ? 'Reading…' : 'Scan receipt',
+            onTap: _scanning ? () {} : () => _addReceipt(scan: true),
           ),
           const SizedBox(width: 8),
           _WebFooterBtn(
             pt: pt,
             icon: Icons.edit_outlined,
             label: 'Add note',
-            onTap: () {},
+            onTap: () => setState(() => _showNote = !_showNote),
           ),
           const Spacer(),
           Row(

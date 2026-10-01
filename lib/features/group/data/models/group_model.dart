@@ -14,6 +14,13 @@ class GroupModel extends GroupEntity {
     required super.createdAt,
     super.adminIds,
     super.inviteCode,
+    super.coverUrl,
+    super.customCategories,
+    super.balances,
+    super.totalSpentMinor,
+    super.expenseCount,
+    super.lastActivityAt,
+    super.lastExpenseTitle,
     super.netBalance,
   });
 
@@ -23,6 +30,8 @@ class GroupModel extends GroupEntity {
     final memberNamesRaw = data['memberNames'] as Map<String, dynamic>? ?? {};
     final memberNames = memberNamesRaw.map((k, v) => MapEntry(k, v as String));
     final createdBy = data['createdBy'] as String? ?? '';
+    // Only trust the summary once the backend has marked it complete.
+    final summary = data['summaryVersion'] == 1 && data['balances'] is Map;
     // Groups created before admin roles existed only have a creator.
     final adminIds = data['adminIds'] is List
         ? List<String>.from(data['adminIds'] as List)
@@ -38,6 +47,26 @@ class GroupModel extends GroupEntity {
       createdBy: createdBy,
       adminIds: adminIds,
       inviteCode: data['inviteCode'] as String?,
+      coverUrl: data['coverUrl'] as String?,
+      customCategories: [
+        for (final c in (data['customCategories'] as List? ?? []))
+          if (c is Map && c['id'] is String)
+            CustomCategory(
+              id: c['id'] as String,
+              name: c['name'] as String? ?? '',
+              emoji: c['emoji'] as String? ?? '✨',
+            ),
+      ],
+      balances: summary
+          ? {
+              for (final e in (data['balances'] as Map? ?? {}).entries)
+                e.key as String: (e.value as num).toInt(),
+            }
+          : null,
+      totalSpentMinor: (data['totalSpentMinor'] as num?)?.toInt(),
+      expenseCount: (data['expenseCount'] as num?)?.toInt(),
+      lastActivityAt: (data['lastActivityAt'] as Timestamp?)?.toDate(),
+      lastExpenseTitle: data['lastExpenseTitle'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }

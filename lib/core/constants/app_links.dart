@@ -9,6 +9,10 @@ class AppLinks {
 
   static String invite(String code) => 'https://$host/invite/$code';
 
+  /// Hosted legal pages (web/legal/*.html).
+  static const terms = 'https://$host/legal/terms.html';
+  static const privacy = 'https://$host/legal/privacy.html';
+
   /// Extracts an invite code from any link we hand out:
   /// `https://<host>/invite/CODE`, `https://<host>/join/CODE`,
   /// `paypact://invite/CODE`, or a bare `/CODE`-style path.

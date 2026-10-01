@@ -1,5 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:paypact/core/services/file_export.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
@@ -49,7 +51,11 @@ Color _categoryColor(String key, bool isDark) {
   };
 }
 
-String _categoryLabel(String key) => switch (key) {
+String _categoryLabel(String key) => key.startsWith('custom:')
+    ? key.substring(7)
+    : _builtinCategoryLabel(key);
+
+String _builtinCategoryLabel(String key) => switch (key) {
       'stay' => 'Stays',
       'food' => 'Food',
       'transport' => 'Transport',
@@ -147,7 +153,9 @@ class _InsightsBodyState extends State<_InsightsBody> {
           SafeArea(
             child: Column(
               children: [
-                _Header(onBack: () => context.pop()),
+                _Header(
+                    onBack: () => context.pop(),
+                    onExport: () => _export(context)),
                 Expanded(
                   child: BlocBuilder<InsightsCubit, InsightsState>(
                     builder: (context, state) {
@@ -275,9 +283,31 @@ class _InsightsBodyState extends State<_InsightsBody> {
 
 // ── Header ────────────────────────────────────────────────────────────────────
 
+/// Exports the period on screen as a CSV through the share sheet.
+Future<void> _export(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final csv = await context.read<InsightsCubit>().exportCsv();
+    final outcome = await shareTextFile(
+      fileName: 'paypact-expenses-${DateFormat('yyyy-MM-dd').format(DateTime.now())}.csv',
+      mimeType: 'text/csv',
+      content: csv,
+      subject: 'PayPact expenses',
+    );
+    if (outcome == ExportOutcome.copied) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Copied as CSV — paste it into a spreadsheet.')));
+    }
+  } catch (_) {
+    messenger.showSnackBar(
+        const SnackBar(content: Text("Couldn't export right now. Try again.")));
+  }
+}
+
 class _Header extends StatelessWidget {
-  const _Header({required this.onBack});
+  const _Header({required this.onBack, required this.onExport});
   final VoidCallback onBack;
+  final VoidCallback onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -293,7 +323,10 @@ class _Header extends StatelessWidget {
               .copyWith(color: pt.ink, fontWeight: FontWeight.w600),
         ),
         const Spacer(),
-        PpGlassIconButton(icon: Icons.ios_share_outlined, onTap: () {}),
+        PpGlassIconButton(
+            icon: Icons.ios_share_outlined,
+            label: 'Export as CSV',
+            onTap: onExport),
       ]),
     );
   }

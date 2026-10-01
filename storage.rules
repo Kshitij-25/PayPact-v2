@@ -1,0 +1,34 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isImageUnder(maxBytes) {
+      return request.resource.contentType.matches('image/.*') &&
+        request.resource.size < maxBytes;
+    }
+
+    function isGroupMember(groupId) {
+      return signedIn() &&
+        request.auth.uid in firestore.get(/databases/(default)/documents/groups/$(groupId)).data.memberIds;
+    }
+
+    // Profile photos: anyone signed in can see them, only the owner changes them.
+    match /avatars/{fileName} {
+      allow read: if signedIn();
+      allow write: if signedIn() &&
+        fileName == request.auth.uid + '.jpg' && isImageUnder(2 * 1024 * 1024);
+      allow delete: if signedIn() && fileName == request.auth.uid + '.jpg';
+    }
+
+    // Group covers and expense receipts: members only.
+    match /groups/{groupId}/{allPaths=**} {
+      allow read: if isGroupMember(groupId);
+      allow write: if isGroupMember(groupId) && isImageUnder(5 * 1024 * 1024);
+      allow delete: if isGroupMember(groupId);
+    }
+  }
+}

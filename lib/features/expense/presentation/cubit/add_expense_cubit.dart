@@ -1,7 +1,10 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:paypact/core/services/exchange_rate_service.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
+import 'package:paypact/features/expense/domain/entities/expense_extras.dart';
+import 'package:paypact/features/expense/domain/expense_changes.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/expense/domain/split_allocator.dart';
 import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
 
 part 'add_expense_state.dart';
@@ -17,6 +20,7 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
   Future<void> saveExpense({
     required String groupId,
     required String groupCurrency,
+    String groupName = '',
     required String title,
     required double amount,
     required String originalCurrency,
@@ -25,6 +29,10 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
     required String paidByName,
     required List<ExpenseSplitEntity> splits,
     required String currentUserId,
+    DateTime? date,
+    String? note,
+    String? receiptUrl,
+    RecurrenceInterval? repeat,
   }) async {
     if (title.trim().isEmpty) {
       emit(AddExpenseError('Please enter a description'));
@@ -38,8 +46,10 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
     try {
       final exchangeRate =
           await _resolveRate(originalCurrency, groupCurrency, null);
-      final baseAmount = amount * exchangeRate;
-      final baseSplits = _toBaseSplits(splits, exchangeRate);
+      final baseMinor = toMinor(amount * exchangeRate);
+      final baseAmount = fromMinor(baseMinor);
+      final baseSplits = _toBaseSplits(splits, baseMinor);
+      final spentOn = date ?? DateTime.now();
 
       await _repo.createExpense(
         groupId: groupId,
@@ -53,7 +63,34 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
         paidByName: paidByName,
         splits: baseSplits,
         createdById: currentUserId,
+        date: spentOn,
+        note: note,
+        receiptUrl: receiptUrl,
       );
+
+      // "Repeat": the expense above is the first occurrence; the template makes
+      // a daily job create the following ones.
+      if (repeat != null) {
+        await _repo.createRecurring(RecurringExpense(
+          id: '',
+          groupId: groupId,
+          title: title.trim(),
+          amount: baseAmount,
+          originalAmount: amount,
+          originalCurrency: originalCurrency,
+          exchangeRate: exchangeRate,
+          category: category,
+          paidById: paidById,
+          paidByName: paidByName,
+          splits: baseSplits,
+          interval: repeat,
+          nextRunAt: nextRecurrence(spentOn, repeat),
+          active: true,
+          createdById: currentUserId,
+          createdByName: paidById == currentUserId ? paidByName : '',
+          note: note,
+        ));
+      }
 
       final others = splits.where((s) => s.userId != currentUserId).toList();
       await Future.wait(others.map((s) => _notifRepo.push(
@@ -89,6 +126,9 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
     required List<ExpenseSplitEntity> splits,
     required String currentUserId,
     required String currentUserName,
+    DateTime? date,
+    String? note,
+    String? receiptUrl,
   }) async {
     if (title.trim().isEmpty) {
       emit(AddExpenseError('Please enter a description'));
@@ -102,8 +142,10 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
     try {
       final exchangeRate =
           await _resolveRate(originalCurrency, groupCurrency, existing);
-      final baseAmount = amount * exchangeRate;
-      final baseSplits = _toBaseSplits(splits, exchangeRate);
+      final baseMinor = toMinor(amount * exchangeRate);
+      final baseAmount = fromMinor(baseMinor);
+      final baseSplits = _toBaseSplits(splits, baseMinor);
+      final cleanNote = note?.trim().isEmpty ?? true ? null : note!.trim();
 
       await _repo.updateExpense(
         groupId: existing.groupId,
@@ -117,7 +159,36 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
         paidById: paidById,
         paidByName: paidByName,
         splits: baseSplits,
+        date: date ?? existing.date,
+        note: cleanNote,
+        receiptUrl: receiptUrl,
       );
+
+      // Edit log: what changed, and who changed it.
+      final after = ExpenseEntity(
+        id: existing.id,
+        groupId: existing.groupId,
+        title: title.trim(),
+        amount: baseAmount,
+        originalAmount: amount,
+        originalCurrency: originalCurrency,
+        exchangeRate: exchangeRate,
+        category: category,
+        paidById: paidById,
+        paidByName: paidByName,
+        splits: baseSplits,
+        createdAt: existing.createdAt,
+        createdById: existing.createdById,
+        date: date ?? existing.date,
+        note: cleanNote,
+        receiptUrl: receiptUrl,
+      );
+      final changes =
+          describeExpenseChanges(existing, after, groupCurrency: groupCurrency);
+      if (changes.isNotEmpty) {
+        await _repo.addHistory(existing.groupId, existing.id,
+            by: currentUserId, byName: currentUserName, changes: changes);
+      }
 
       // Notify everyone involved before or after the edit, except the editor.
       final affected = <String>{
@@ -150,13 +221,18 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
     return _rateService.getRate(from, to);
   }
 
+  /// Converts the shares to the group currency so they total [baseMinor]
+  /// *exactly* (rounding each share on its own would drift by a paisa or two).
   List<ExpenseSplitEntity> _toBaseSplits(
-          List<ExpenseSplitEntity> splits, double rate) =>
-      splits
-          .map((s) => ExpenseSplitEntity(
-                userId: s.userId,
-                userName: s.userName,
-                amount: double.parse((s.amount * rate).toStringAsFixed(2)),
-              ))
-          .toList();
+      List<ExpenseSplitEntity> splits, int baseMinor) {
+    final minors = rescaleShares([for (final s in splits) s.amount], baseMinor);
+    return [
+      for (var i = 0; i < splits.length; i++)
+        ExpenseSplitEntity(
+          userId: splits[i].userId,
+          userName: splits[i].userName,
+          amount: fromMinor(minors[i]),
+        ),
+    ];
+  }
 }

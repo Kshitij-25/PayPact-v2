@@ -1,3 +1,4 @@
+import 'package:paypact/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +12,7 @@ import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/auth/presentation/screens/auth_brand_panel.dart';
 import 'package:paypact/features/auth/presentation/screens/forgot_password_dialog.dart';
+import 'package:paypact/features/auth/presentation/widgets/legal_text.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -49,19 +51,19 @@ class _SignInScreenState extends State<SignInScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('WELCOME BACK',
+        Text(context.l10n.signInEyebrow,
             style: PayPactTypography.label
                 .copyWith(color: pt.accent, letterSpacing: 1.6)),
         const SizedBox(height: 14),
-        Text("Hello, friend.\nLet's get you in.",
+        Text(context.l10n.signInTitle,
             style: PayPactTypography.displayLg.copyWith(color: pt.ink)),
         const SizedBox(height: 10),
         Text(
-          "Sign in with your email — we'll keep things calm.",
+          context.l10n.signInSubtitle,
           style: PayPactTypography.bodyLg.copyWith(color: pt.ink2),
         ),
         const SizedBox(height: 36),
-        _Label(text: 'EMAIL'),
+        _Label(text: context.l10n.labelEmail),
         const SizedBox(height: 8),
         _TextField(
           controller: _emailCtrl,
@@ -76,14 +78,14 @@ class _SignInScreenState extends State<SignInScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _Label(text: 'PASSWORD'),
+            _Label(text: context.l10n.labelPassword),
             GestureDetector(
               onTap: () => showForgotPasswordDialog(context,
                   initialEmail: _emailCtrl.text.trim()),
               behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text('Forgot?',
+                child: Text(context.l10n.forgot,
                     style: PayPactTypography.bodySm.copyWith(
                         color: pt.accent, fontWeight: FontWeight.w600)),
               ),
@@ -130,7 +132,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     : null,
               ),
               const SizedBox(width: 12),
-              Text('Keep me signed in on this device',
+              Text(context.l10n.keepSignedIn,
                   style: PayPactTypography.bodySm.copyWith(color: pt.ink2)),
             ],
           ),
@@ -143,7 +145,9 @@ class _SignInScreenState extends State<SignInScreen> {
                     _emailCtrl.text.trim(),
                     _passwordCtrl.text,
                   ),
-          label: loading ? 'Signing in…' : 'Sign in to PayPact',
+          label: loading
+              ? context.l10n.signingIn
+              : context.l10n.signInButton,
           variant: PayPactButtonVariant.accent,
           size: PayPactButtonSize.large,
           isFullWidth: true,
@@ -154,7 +158,7 @@ class _SignInScreenState extends State<SignInScreen> {
           Expanded(child: Divider(color: pt.border)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text('OR',
+            child: Text(context.l10n.orDivider,
                 style: PayPactTypography.label.copyWith(color: pt.ink3)),
           ),
           Expanded(child: Divider(color: pt.border)),
@@ -179,10 +183,7 @@ class _SignInScreenState extends State<SignInScreen> {
               child: PayPactButton(
                 onPressed: loading
                     ? null
-                    : () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Apple sign-in is coming soon.')),
-                        ),
+                    : () => locator<AuthCubit>().signInWithApple(),
                 label: 'Apple',
                 variant: PayPactButtonVariant.secondary,
                 size: PayPactButtonSize.large,
@@ -194,29 +195,16 @@ class _SignInScreenState extends State<SignInScreen> {
         ),
         const SizedBox(height: 24),
         Center(
-          child: Text.rich(
-            TextSpan(
-              style: PayPactTypography.bodySm.copyWith(color: pt.ink3),
-              children: [
-                const TextSpan(text: 'By signing in you agree to our '),
-                TextSpan(
-                  text: 'Terms',
-                  style: TextStyle(
-                      color: pt.ink2,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline),
-                ),
-                const TextSpan(text: ' and '),
-                TextSpan(
-                  text: 'Privacy Policy',
-                  style: TextStyle(
-                      color: pt.ink2,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline),
-                ),
-                const TextSpan(text: '.'),
-              ],
-            ),
+          child: LegalText(
+            prefix: context.l10n.agreePrefix,
+            termsLabel: context.l10n.terms,
+            privacyLabel: context.l10n.privacyPolicy,
+            conjunction: context.l10n.and,
+            style: PayPactTypography.bodySm.copyWith(color: pt.ink3),
+            linkStyle: TextStyle(
+                color: pt.ink2,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline),
             textAlign: TextAlign.center,
           ),
         ),
@@ -259,12 +247,12 @@ class _SignInScreenState extends State<SignInScreen> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
-                                Text('New to PayPact?',
+                                Text(context.l10n.newToPaypact,
                                     style: PayPactTypography.bodyMd
                                         .copyWith(color: pt.ink2)),
                                 const SizedBox(width: 14),
                                 _PillButton(
-                                  label: 'Create account',
+                                  label: context.l10n.createAccount,
                                   onTap: () => context.push(AppRoutes.signUp),
                                 ),
                               ],
@@ -321,21 +309,21 @@ class _SignInScreenState extends State<SignInScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('WELCOME BACK',
+                            Text(context.l10n.signInEyebrow,
                                 style: PayPactTypography.label.copyWith(
                                     color: pt.accent, letterSpacing: 1.6)),
                             const SizedBox(height: 14),
-                            Text("Hello, friend.\nLet's get you in.",
+                            Text(context.l10n.signInTitle,
                                 style: PayPactTypography.displayLg
                                     .copyWith(color: pt.ink)),
                             const SizedBox(height: 12),
                             Text(
-                              "Sign in with your email — we'll keep things calm.",
+                              context.l10n.signInSubtitle,
                               style: PayPactTypography.bodyLg
                                   .copyWith(color: pt.ink2),
                             ),
                             const SizedBox(height: 28),
-                            _Label(text: 'EMAIL'),
+                            _Label(text: context.l10n.labelEmail),
                             const SizedBox(height: 8),
                             _TextField(
                               controller: _emailCtrl,
@@ -347,7 +335,7 @@ class _SignInScreenState extends State<SignInScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _Label(text: 'PASSWORD'),
+                                _Label(text: context.l10n.labelPassword),
                                 GestureDetector(
                                   onTap: () => showForgotPasswordDialog(
                                       context,
@@ -356,7 +344,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                   child: Padding(
                                     padding:
                                         const EdgeInsets.symmetric(vertical: 4),
-                                    child: Text('Forgot?',
+                                    child: Text(context.l10n.forgot,
                                         style: PayPactTypography.bodySm
                                             .copyWith(
                                                 color: pt.accent,
@@ -391,7 +379,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                         _emailCtrl.text.trim(),
                                         _passwordCtrl.text,
                                       ),
-                              label: loading ? 'Signing in…' : 'Sign in',
+                              label: loading
+                                  ? context.l10n.signingIn
+                                  : context.l10n.signInShort,
                               variant: PayPactButtonVariant.accent,
                               size: PayPactButtonSize.large,
                               isFullWidth: true,
@@ -403,7 +393,7 @@ class _SignInScreenState extends State<SignInScreen> {
                               Padding(
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 12),
-                                child: Text('OR',
+                                child: Text(context.l10n.orDivider,
                                     style: PayPactTypography.label
                                         .copyWith(color: pt.ink3)),
                               ),
@@ -415,7 +405,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                   ? null
                                   : () =>
                                       locator<AuthCubit>().signInWithGoogle(),
-                              label: 'Continue with Google',
+                              label: context.l10n.continueWithGoogle,
                               variant: PayPactButtonVariant.secondary,
                               size: PayPactButtonSize.large,
                               isFullWidth: true,
@@ -430,9 +420,9 @@ class _SignInScreenState extends State<SignInScreen> {
                                     style: PayPactTypography.bodyMd
                                         .copyWith(color: pt.ink2),
                                     children: [
-                                      const TextSpan(text: 'New to PayPact? '),
+                                      TextSpan(text: '${context.l10n.newToPaypact} '),
                                       TextSpan(
-                                        text: 'Create an account',
+                                        text: context.l10n.createAnAccount,
                                         style: PayPactTypography.bodyMd
                                             .copyWith(
                                                 color: pt.accent,

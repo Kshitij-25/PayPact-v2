@@ -1,30 +1,70 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/services/exchange_rate_service.dart';
 import 'package:paypact/core/utils/default_currency.dart';
+import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/group/data/summary_service.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
+import 'package:paypact/features/settle/domain/debt_simplifier.dart';
 
 part 'groups_state.dart';
+
+/// Everything Home / Groups needs from one group, however it was obtained.
+class _GroupSlice {
+  _GroupSlice({
+    required this.group,
+    required this.myNet,
+    required this.recent,
+    required this.weeklyDelta,
+    required this.meta,
+    required this.owedToMe,
+    required this.lastActivity,
+    required this.settleDays,
+  });
+  final GroupEntity group;
+  final double myNet; // group currency
+  final List<RecentExpenseItem> recent;
+  final double weeklyDelta; // group currency
+  final GroupMeta meta;
+
+  /// +amount = that member owes me, −amount = I owe them (simplified plan).
+  final Map<String, double> owedToMe;
+  final DateTime? lastActivity;
+
+  /// Days from the group's start to each recorded settlement.
+  final List<double> settleDays;
+}
 
 class GroupsCubit extends Cubit<GroupsState> {
   final GroupRepository _groupRepo;
   final ExpenseRepository _expenseRepo;
   final ExchangeRateService? _rates;
   final String Function()? _defaultCurrency;
+  final SummaryService? _summaries;
   String _userId;
   StreamSubscription<List<GroupEntity>>? _sub;
 
-  /// [rates] / [defaultCurrency] default to the app-wide service and the
-  /// user's Settings choice; tests inject their own.
+  /// [rates] / [defaultCurrency] / [summaries] default to the app-wide
+  /// instances; tests inject their own.
   GroupsCubit(this._groupRepo, this._expenseRepo, this._userId,
-      {ExchangeRateService? rates, String Function()? defaultCurrency})
+      {ExchangeRateService? rates,
+      String Function()? defaultCurrency,
+      SummaryService? summaries})
       : _rates = rates,
         _defaultCurrency = defaultCurrency,
+        _summaries = summaries,
         super(GroupsInitial());
+
+  /// Switch the active user (used by the global instance on sign in/out)
+  /// and reload, without tearing down the widget tree.
+  void setUser(String userId) {
+    if (userId == _userId) return;
+    _userId = userId;
+    loadGroups();
+  }
 
   /// Rate from each group currency into [target]. Groups whose rate can't be
   /// fetched are left out (treated 1:1) rather than failing the whole screen.
@@ -46,12 +86,10 @@ class GroupsCubit extends Cubit<GroupsState> {
     return out;
   }
 
-  /// Switch the active user (used by the global instance on sign in/out)
-  /// and reload, without tearing down the widget tree.
-  void setUser(String userId) {
-    if (userId == _userId) return;
-    _userId = userId;
-    loadGroups();
+  void _ensureSummary(String groupId) {
+    try {
+      (_summaries ?? locator<SummaryService>()).ensure(groupId);
+    } catch (_) {}
   }
 
   void loadGroups() {
@@ -63,271 +101,225 @@ class GroupsCubit extends Cubit<GroupsState> {
     emit(GroupsLoading());
     _sub = _groupRepo.watchUserGroups(_userId).listen(
       (groups) async {
-        final results = await Future.wait(
-          groups.map((g) async {
-            final expenses = await _expenseRepo.getGroupExpenses(g.id);
-            final settlements = await _expenseRepo.getGroupSettlements(g.id);
-            g.netBalance = _computeBalance(expenses, settlements, _userId);
-            return (g, expenses, settlements);
-          }),
-        );
-
-        // Cross-group totals are shown in the user's default currency; each
-        // group's own balance stays in that group's currency.
-        final target = (_defaultCurrency ?? userDefaultCurrency)();
-        final toTarget =
-            await _ratesInto(target, groups.map((g) => g.currency));
-        double rate(String c) => toTarget[c] ?? 1.0;
-
-        final total = groups.fold<double>(
-            0, (sum, g) => sum + g.netBalance * rate(g.currency));
-
-        final now = DateTime.now();
-        final weekStart = DateTime(now.year, now.month, now.day - (now.weekday - 1));
-
-        double weeklyDelta = 0;
-
-        // Per-member tracking for smart nudge and open balances
-        final Map<String, double> memberBalance = {};   // others owe me
-        final Map<String, double> owedToMember = {};    // I owe others
-        final Map<String, DateTime> memberLastActivity = {};
-        final Map<String, String> memberNames = {};
-        final Map<String, String> memberGroupNames = {};
-        final Map<String, String> memberGroupIds = {};
-        final Map<String, String> memberGroupCurrency = {};
-
-        final List<RecentExpenseItem> allExpenses = [];
-        final Map<String, GroupMeta> groupMetas = {};
-
-        for (final (group, expenses, settlements) in results) {
-          // Per-group metadata: total spent, count, last activity
-          double groupWeekly = 0; // this group's week delta, in its currency
-          double groupTotal = 0;
-          DateTime? lastAt;
-          String lastTitle = '';
-          for (final e in expenses) {
-            groupTotal += e.amount;
-            if (lastAt == null || e.createdAt.isAfter(lastAt)) {
-              lastAt = e.createdAt;
-              lastTitle = e.title;
-            }
-          }
-          for (final s in settlements) {
-            final sAt = s['createdAt'] as DateTime?;
-            if (sAt != null && (lastAt == null || sAt.isAfter(lastAt))) {
-              lastAt = sAt;
-            }
-          }
-          groupMetas[group.id] = GroupMeta(
-            totalSpent: groupTotal,
-            expenseCount: expenses.length,
-            lastExpenseTitle: lastTitle,
-            lastActivityAt: lastAt,
-          );
-
-          for (final e in expenses) {
-            allExpenses.add(RecentExpenseItem(
-              expenseId: e.id,
-              groupId: group.id,
-              title: e.title,
-              groupName: group.name,
-              groupEmoji: group.emoji,
-              amount: e.amount,
-              isPaidByCurrentUser: e.paidById == _userId,
-              paidByName: e.paidByName,
-              createdAt: e.createdAt,
-              category: e.category,
-              currency: group.currency,
-            ));
-
-            // Weekly delta
-            if (!e.createdAt.isBefore(weekStart)) {
-              final myShare = e.splitAmountFor(_userId);
-              if (e.paidById == _userId) {
-                groupWeekly += (e.amount - myShare);
-              } else {
-                groupWeekly -= myShare;
-              }
-            }
-
-            // Track what each member owes me
-            if (e.paidById == _userId) {
-              for (final split in e.splits) {
-                if (split.userId != _userId && split.amount > 0) {
-                  memberBalance[split.userId] =
-                      (memberBalance[split.userId] ?? 0) + split.amount;
-                  memberNames[split.userId] ??= split.userName;
-                  memberGroupNames[split.userId] ??= group.name;
-                  memberGroupIds[split.userId] ??= group.id;
-                  memberGroupCurrency[split.userId] ??= group.currency;
-                  final prev = memberLastActivity[split.userId];
-                  if (prev == null || e.createdAt.isAfter(prev)) {
-                    memberLastActivity[split.userId] = e.createdAt;
-                  }
-                }
-              }
-            } else {
-              // Track what I owe the payer
-              final myShare = e.splitAmountFor(_userId);
-              if (myShare > 0) {
-                owedToMember[e.paidById] =
-                    (owedToMember[e.paidById] ?? 0) + myShare;
-                memberNames[e.paidById] ??= e.paidByName;
-                memberGroupNames[e.paidById] ??= group.name;
-                memberGroupIds[e.paidById] ??= group.id;
-                memberGroupCurrency[e.paidById] ??= group.currency;
-              }
-            }
-          }
-
-          for (final s in settlements) {
-            final fromId = s['fromUserId'] as String? ?? '';
-            final toId = s['toUserId'] as String? ?? '';
-            final amount = (s['amount'] as num?)?.toDouble() ?? 0.0;
-            final settledAt = s['createdAt'] as DateTime?;
-
-            // Weekly delta for settlements
-            if (settledAt != null && !settledAt.isBefore(weekStart)) {
-              if (toId == _userId) {
-                groupWeekly -= amount;
-              } else if (fromId == _userId) {
-                groupWeekly += amount;
-              }
-            }
-
-            // Reduce balances on settlement
-            if (toId == _userId && memberBalance.containsKey(fromId)) {
-              memberBalance[fromId] =
-                  math.max(0, (memberBalance[fromId]! - amount));
-            }
-            if (fromId == _userId && owedToMember.containsKey(toId)) {
-              owedToMember[toId] =
-                  math.max(0, (owedToMember[toId]! - amount));
-            }
-
-            // Update last activity for nudge
-            if (toId == _userId && fromId.isNotEmpty && settledAt != null) {
-              final prev = memberLastActivity[fromId];
-              if (prev == null || settledAt.isAfter(prev)) {
-                memberLastActivity[fromId] = settledAt;
-              }
-            }
-          }
-
-          weeklyDelta += groupWeekly * rate(group.currency);
+        try {
+          final now = DateTime.now();
+          final weekStart =
+              DateTime(now.year, now.month, now.day - (now.weekday - 1));
+          final slices = await Future.wait(
+              groups.map((g) => _sliceFor(g, weekStart)));
+          final target = (_defaultCurrency ?? userDefaultCurrency)();
+          final toTarget =
+              await _ratesInto(target, groups.map((g) => g.currency));
+          if (isClosed) return;
+          emit(_assemble(slices, now, toTarget));
+        } catch (e) {
+          if (!isClosed) emit(GroupsError(e.toString()));
         }
-
-        // Net per-member balance (positive = they owe me, negative = I owe them)
-        final Map<String, double> netPerMember = {...memberBalance};
-        owedToMember.forEach((uid, amt) {
-          netPerMember[uid] = (netPerMember[uid] ?? 0) - amt;
-        });
-        final memberBalances = netPerMember.entries
-            .where((e) => e.value.abs() >= 1)
-            .map((e) => MemberBalanceItem(
-                  userId: e.key,
-                  name: memberNames[e.key] ?? 'Member',
-                  netBalance: e.value,
-                  currency: memberGroupCurrency[e.key] ?? 'INR',
-                  groupName: memberGroupNames[e.key] ?? '',
-                  groupId: memberGroupIds[e.key] ?? '',
-                  daysSilent: () {
-                    final last = memberLastActivity[e.key];
-                    return last != null ? now.difference(last).inDays : 0;
-                  }(),
-                ))
-            .toList()
-          ..sort((a, b) =>
-              b.netBalance.abs().compareTo(a.netBalance.abs()));
-
-        // Recent expenses — most recent first, top 5
-        allExpenses.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        final recentExpenses = allExpenses.take(5).toList();
-
-        // Smart nudge — pick person with longest silence who still owes ≥ ₹10
-        SmartNudgeData? smartNudge;
-        const minDaysSilent = 5;
-        int longestSilence = 0;
-
-        memberBalance.forEach((uid, owed) {
-          if (owed < 10) return;
-          final lastActivity = memberLastActivity[uid];
-          final daysSilent = lastActivity != null
-              ? now.difference(lastActivity).inDays
-              : 0;
-          if (daysSilent >= minDaysSilent && daysSilent > longestSilence) {
-            longestSilence = daysSilent;
-            smartNudge = SmartNudgeData(
-              memberName: memberNames[uid] ?? 'Member',
-              groupName: memberGroupNames[uid] ?? '',
-              groupId: memberGroupIds[uid] ?? '',
-              fromUserId: uid,
-              amountOwed: owed,
-              daysSilent: daysSilent,
-              currency: memberGroupCurrency[uid] ?? 'INR',
-            );
-          }
-        });
-
-        // Avg settle time — average hours between oldest group expense and each settlement
-        double avgSettleDays = 0;
-        int settleDataPoints = 0;
-        for (final (_, expenses, settlements) in results) {
-          if (expenses.isEmpty || settlements.isEmpty) continue;
-          dynamic firstExpense = expenses.first;
-          for (final e in expenses.skip(1)) {
-            if ((e as dynamic).createdAt.isBefore(
-                (firstExpense as dynamic).createdAt)) {
-              firstExpense = e;
-            }
-          }
-          for (final s in settlements) {
-            final settledAt = s['createdAt'] as DateTime?;
-            if (settledAt == null) continue;
-            final days =
-                settledAt.difference(firstExpense.createdAt).inMinutes / 1440.0;
-            if (days >= 0) {
-              avgSettleDays += days;
-              settleDataPoints++;
-            }
-          }
-        }
-        if (settleDataPoints > 0) avgSettleDays /= settleDataPoints;
-
-        emit(GroupsLoaded(
-          groups: groups,
-          totalNetBalance: total,
-          weeklyDelta: weeklyDelta,
-          smartNudge: smartNudge,
-          memberBalances: memberBalances,
-          avgSettleDays: avgSettleDays,
-          recentExpenses: recentExpenses,
-          groupMetas: groupMetas,
-        ));
       },
       onError: (e) => emit(GroupsError(e.toString())),
     );
   }
 
-  double _computeBalance(List expenses, List<Map<String, dynamic>> settlements,
-      String userId) {
-    double balance = 0;
-    for (final e in expenses) {
-      final myShare = e.splitAmountFor(userId);
-      if (e.paidById == userId) {
-        balance += (e.amount - myShare);
-      } else {
-        balance -= myShare;
+  /// One group's contribution. With a server summary this is a handful of
+  /// bounded queries no matter how long the group has existed; without one it
+  /// reads the whole history (and asks the backend to build the summary so the
+  /// next refresh is cheap).
+  Future<_GroupSlice> _sliceFor(GroupEntity g, DateTime weekStart) async {
+    Map<String, int> balances;
+    List<ExpenseEntity>? all;
+    List<Map<String, dynamic>>? allSettlements;
+
+    if (g.hasSummary) {
+      balances = g.balances!;
+    } else {
+      _ensureSummary(g.id);
+      all = await _expenseRepo.getGroupExpenses(g.id);
+      allSettlements = await _expenseRepo.getGroupSettlements(g.id);
+      balances = computeNetBalances(
+          expenses: all, settlements: allSettlements, memberIds: g.memberIds);
+    }
+
+    // Bounded reads (the legacy path already has everything in memory).
+    final recentExpenses = all?.take(5).toList() ??
+        await _expenseRepo.getGroupExpenses(g.id, limit: 5);
+    final weekExpenses = all
+            ?.where((e) => !e.createdAt.isBefore(weekStart))
+            .toList() ??
+        await _expenseRepo.getGroupExpenses(g.id,
+            since: weekStart, limit: 200);
+    final settlements = allSettlements ??
+        await _expenseRepo.getGroupSettlements(g.id, limit: 50);
+
+    // This week's movement for me.
+    double weekly = 0;
+    for (final e in weekExpenses) {
+      final share = e.splitAmountFor(_userId);
+      weekly += e.paidById == _userId ? e.amount - share : -share;
+    }
+    for (final s in settlements) {
+      final at = s['createdAt'] as DateTime?;
+      if (at == null || at.isBefore(weekStart)) continue;
+      final amount = _settlementAmount(s);
+      if (s['toUserId'] == _userId) weekly -= amount;
+      if (s['fromUserId'] == _userId) weekly += amount;
+    }
+
+    final myNet = (balances[_userId] ?? 0) / 100.0;
+
+    // Who owes whom, via the same minimised plan the Settle screen shows.
+    final names = Map<String, String>.from(g.memberNames);
+    final owedToMe = <String, double>{};
+    for (final d in simplifyDebts(balances, names)) {
+      if (d.toUserId == _userId) owedToMe[d.fromUserId] = d.amount;
+      if (d.fromUserId == _userId) owedToMe[d.toUserId] = -d.amount;
+    }
+
+    DateTime? lastAt = g.lastActivityAt;
+    String lastTitle = g.lastExpenseTitle ?? '';
+    double totalSpent = (g.totalSpentMinor ?? 0) / 100.0;
+    int count = g.expenseCount ?? 0;
+    if (all != null) {
+      totalSpent = 0;
+      count = all.length;
+      lastAt = null;
+      for (final e in all) {
+        totalSpent += e.amount;
+        if (lastAt == null || e.createdAt.isAfter(lastAt)) {
+          lastAt = e.createdAt;
+          lastTitle = e.title;
+        }
       }
     }
     for (final s in settlements) {
-      if (s['fromUserId'] == userId) {
-        balance += (s['amount'] as num).toDouble();
-      } else if (s['toUserId'] == userId) {
-        balance -= (s['amount'] as num).toDouble();
-      }
+      final at = s['createdAt'] as DateTime?;
+      if (at != null && (lastAt == null || at.isAfter(lastAt))) lastAt = at;
     }
-    return balance;
+
+    return _GroupSlice(
+      group: g,
+      myNet: myNet,
+      recent: [
+        for (final e in recentExpenses)
+          RecentExpenseItem(
+            expenseId: e.id,
+            groupId: g.id,
+            title: e.title,
+            groupName: g.name,
+            groupEmoji: g.emoji,
+            amount: e.amount,
+            isPaidByCurrentUser: e.paidById == _userId,
+            paidByName: e.paidByName,
+            createdAt: e.createdAt,
+            category: e.category,
+            currency: g.currency,
+          ),
+      ],
+      weeklyDelta: weekly,
+      meta: GroupMeta(
+        totalSpent: totalSpent,
+        expenseCount: count,
+        lastExpenseTitle: lastTitle,
+        lastActivityAt: lastAt,
+      ),
+      owedToMe: owedToMe,
+      lastActivity: lastAt,
+      settleDays: [
+        for (final s in settlements)
+          if (s['createdAt'] is DateTime &&
+              (s['createdAt'] as DateTime).isAfter(g.createdAt))
+            (s['createdAt'] as DateTime).difference(g.createdAt).inMinutes /
+                1440.0,
+      ],
+    );
+  }
+
+  double _settlementAmount(Map<String, dynamic> s) {
+    final paise = (s['amountPaise'] as num?)?.toInt();
+    return paise != null
+        ? paise / 100.0
+        : (s['amount'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  GroupsLoaded _assemble(
+      List<_GroupSlice> slices, DateTime now, Map<String, double> toTarget) {
+    final groups = [for (final s in slices) s.group];
+    for (final s in slices) {
+      s.group.netBalance = s.myNet;
+    }
+
+    // Cross-group totals are shown in the user's default currency; each
+    // group's own balance stays in that group's currency.
+    double rate(String c) => toTarget[c] ?? 1.0;
+
+    final total =
+        slices.fold<double>(0, (sum, s) => sum + s.myNet * rate(s.group.currency));
+    final weeklyDelta = slices.fold<double>(
+        0, (sum, s) => sum + s.weeklyDelta * rate(s.group.currency));
+
+    // Open balances per person *and currency* — summing a USD debt into an INR
+    // one would be meaningless.
+    final byKey = <String, MemberBalanceItem>{};
+    final byKeyAbs = <String, double>{};
+    SmartNudgeData? nudge;
+    int longestSilence = 0;
+    for (final s in slices) {
+      final cur = s.group.currency;
+      final silent =
+          s.lastActivity != null ? now.difference(s.lastActivity!).inDays : 0;
+      s.owedToMe.forEach((uid, amount) {
+        final key = '$uid|$cur';
+        final prev = byKey[key];
+        final net = (prev?.netBalance ?? 0) + amount;
+        // Label the row with the group that contributes most.
+        final dominant = amount.abs() >= (byKeyAbs[key] ?? 0);
+        if (dominant) byKeyAbs[key] = amount.abs();
+        byKey[key] = MemberBalanceItem(
+          userId: uid,
+          name: s.group.memberNames[uid] ?? prev?.name ?? 'Member',
+          netBalance: net,
+          currency: cur,
+          groupName: dominant ? s.group.name : prev!.groupName,
+          groupId: dominant ? s.group.id : prev!.groupId,
+          daysSilent: dominant ? silent : prev!.daysSilent,
+        );
+
+        if (amount >= 10 && silent >= 5 && silent > longestSilence) {
+          longestSilence = silent;
+          nudge = SmartNudgeData(
+            memberName: s.group.memberNames[uid] ?? 'Member',
+            groupName: s.group.name,
+            groupId: s.group.id,
+            fromUserId: uid,
+            amountOwed: amount,
+            daysSilent: silent,
+            currency: cur,
+          );
+        }
+      });
+    }
+    final memberBalances = byKey.values
+        .where((m) => m.netBalance.abs() >= 1)
+        .toList()
+      ..sort((a, b) => b.netBalance.abs().compareTo(a.netBalance.abs()));
+
+    final recent = [for (final s in slices) ...s.recent]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    final settleDays = [for (final s in slices) ...s.settleDays];
+    final avgSettleDays = settleDays.isEmpty
+        ? 0.0
+        : settleDays.reduce((a, b) => a + b) / settleDays.length;
+
+    return GroupsLoaded(
+      groups: groups,
+      totalNetBalance: total,
+      weeklyDelta: weeklyDelta,
+      smartNudge: nudge,
+      memberBalances: memberBalances,
+      avgSettleDays: avgSettleDays,
+      recentExpenses: recent.take(5).toList(),
+      groupMetas: {for (final s in slices) s.group.id: s.meta},
+    );
   }
 
   @override

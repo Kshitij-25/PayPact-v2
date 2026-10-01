@@ -32,6 +32,14 @@ class GroupSettingsCubit extends Cubit<GroupSettingsState> {
     }
   }
 
+  /// Re-reads the group without a loading flash (after a cover/category change).
+  Future<void> refresh() async {
+    try {
+      final group = await _repo.getGroup(_groupId);
+      if (group != null) emit(GroupSettingsLoaded(group: group));
+    } catch (_) {}
+  }
+
   Future<void> save({
     required String name,
     required String emoji,

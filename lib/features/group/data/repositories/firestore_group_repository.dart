@@ -107,6 +107,22 @@ class FirestoreGroupRepository implements GroupRepository {
       : <String>[if (data['createdBy'] is String) data['createdBy'] as String];
 
   @override
+  Future<void> setCoverUrl(String groupId, String? url) => _firestore
+      .collection('groups')
+      .doc(groupId)
+      .update({'coverUrl': url ?? FieldValue.delete()});
+
+  @override
+  Future<void> setCustomCategories(
+          String groupId, List<CustomCategory> categories) =>
+      _firestore.collection('groups').doc(groupId).update({
+        'customCategories': [
+          for (final c in categories)
+            {'id': c.id, 'name': c.name, 'emoji': c.emoji},
+        ],
+      });
+
+  @override
   Future<String> ensureInviteCode(String groupId) async {
     final ref = _firestore.collection('groups').doc(groupId);
     final existing = (await ref.get()).data()?['inviteCode'] as String?;

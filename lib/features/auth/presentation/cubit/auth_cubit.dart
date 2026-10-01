@@ -93,6 +93,16 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  Future<void> signInWithApple() async {
+    emit(AuthLoading());
+    try {
+      final user = await _repo.signInWithApple();
+      emit(AuthAuthenticated(user));
+    } catch (e) {
+      emit(AuthError(_friendlyError(e)));
+    }
+  }
+
   Future<void> signOut() async {
     final uid = _repo.currentUser?.id;
     if (uid != null) {
@@ -121,7 +131,21 @@ class AuthCubit extends Cubit<AuthState> {
       return 'Too many attempts. Please try again later.';
     }
     if (msg.contains('network-request-failed')) return 'No internet connection.';
-    if (msg.contains('cancelled')) return 'Sign-in was cancelled.';
+    if (msg.contains('cancelled') ||
+        msg.contains('canceled') ||
+        msg.contains('popup-closed-by-user')) {
+      return 'Sign-in was cancelled.';
+    }
+    if (msg.contains('operation-not-allowed') ||
+        msg.contains('invalid-oauth-client-id')) {
+      return "That sign-in method isn't set up for this app yet.";
+    }
+    if (msg.contains('requires-recent-login')) {
+      return 'Please sign in again to do that.';
+    }
+    if (msg.contains('account-exists-with-different-credential')) {
+      return 'An account already exists with this email using another sign-in method.';
+    }
     return 'Something went wrong. Please try again.';
   }
 

@@ -6,6 +6,7 @@ import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/app_router.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/features/auth/presentation/screens/auth_brand_panel.dart';
+import 'package:paypact/features/auth/presentation/widgets/legal_text.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
@@ -82,11 +83,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     }
     return _PwStrength(score, labels[score], present.join(' · '), suggestion);
   }
-
-  void _comingSoon(String provider) =>
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$provider sign-up is coming soon.')),
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -468,14 +464,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               child: _SocialButton(
                 icon: Icons.apple,
                 label: 'Apple',
-                onTap: loading ? null : () => _comingSoon('Apple'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _SocialButton(
-                label: 'SSO',
-                onTap: loading ? null : () => _comingSoon('SSO'),
+                onTap: loading
+                    ? null
+                    : () => locator<AuthCubit>().signInWithApple(),
               ),
             ),
           ],
@@ -752,32 +743,17 @@ class _AgreeCheckbox extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text.rich(
-              TextSpan(
-                style:
-                    PayPactTypography.bodySm.copyWith(color: pt.ink2, height: 1.5),
-                children: [
-                  const TextSpan(text: "I agree to PayPact's "),
-                  TextSpan(
-                    text: 'Terms',
-                    style: TextStyle(
-                        color: pt.ink,
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.underline),
-                  ),
-                  const TextSpan(text: ' and '),
-                  TextSpan(
-                    text: 'Privacy',
-                    style: TextStyle(
-                        color: pt.ink,
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.underline),
-                  ),
-                  const TextSpan(
-                      text:
-                          '. PayPact will never share my data with brands or feeds.'),
-                ],
-              ),
+            child: LegalText(
+              prefix: "I agree to PayPact's ",
+              termsLabel: 'Terms',
+              privacyLabel: 'Privacy',
+              suffix: '. PayPact will never share my data with brands or feeds.',
+              style: PayPactTypography.bodySm
+                  .copyWith(color: pt.ink2, height: 1.5),
+              linkStyle: TextStyle(
+                  color: pt.ink,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline),
             ),
           ),
         ],

@@ -25,7 +25,9 @@ class ActivityCubit extends Cubit<ActivityState> {
       final allItems = <ActivityItem>[];
 
       await Future.wait(groups.map((group) async {
-        final expenses = await _expenseRepo.getGroupExpenses(group.id);
+        // Only the last 60 days are shown, so only fetch those.
+        final expenses =
+            await _expenseRepo.getGroupExpenses(group.id, since: cutoff);
         for (final e in expenses) {
           if (e.createdAt.isBefore(cutoff)) continue;
           final isMe = e.paidById == userId || e.createdById == userId;

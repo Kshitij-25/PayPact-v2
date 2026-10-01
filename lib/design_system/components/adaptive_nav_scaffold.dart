@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:paypact/l10n/l10n.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:paypact/core/utils/responsive.dart';
@@ -63,26 +64,26 @@ class AdaptiveNavScaffold extends StatelessWidget {
   final int notificationCount;
   final int groupCount;
 
-  static const _destinations = [
+  static List<NavigationRailDestination> _destinations(BuildContext context) => [
     NavigationRailDestination(
       icon: Icon(Icons.home_outlined),
       selectedIcon: Icon(Icons.home_rounded),
-      label: Text('Home'),
+      label: Text(context.l10n.navHome),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.group_outlined),
       selectedIcon: Icon(Icons.group_rounded),
-      label: Text('Groups'),
+      label: Text(context.l10n.navGroups),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.show_chart_rounded),
       selectedIcon: Icon(Icons.show_chart_rounded),
-      label: Text('Activity'),
+      label: Text(context.l10n.navActivity),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.person_outline_rounded),
       selectedIcon: Icon(Icons.person_rounded),
-      label: Text('You'),
+      label: Text(context.l10n.navYou),
     ),
   ];
 
@@ -139,7 +140,7 @@ class AdaptiveNavScaffold extends StatelessWidget {
                   ),
                 ),
               ),
-              destinations: _destinations,
+              destinations: _destinations(context),
             ),
             const VerticalDivider(width: 1, thickness: 1),
             Expanded(child: body),
@@ -311,7 +312,7 @@ class _WebSidebar extends StatelessWidget {
                     activeId: activeId,
                     icon: Icons.home_outlined,
                     activeIcon: Icons.home_rounded,
-                    label: 'Home',
+                    label: context.l10n.navHome,
                     onTap: () => onNavTap(0),
                     pt: pt,
                   ),
@@ -320,7 +321,7 @@ class _WebSidebar extends StatelessWidget {
                     activeId: activeId,
                     icon: Icons.group_outlined,
                     activeIcon: Icons.group_rounded,
-                    label: 'Groups',
+                    label: context.l10n.navGroups,
                     count: groupCount > 0 ? groupCount : null,
                     onTap: () => onNavTap(1),
                     pt: pt,
@@ -330,7 +331,7 @@ class _WebSidebar extends StatelessWidget {
                     activeId: activeId,
                     icon: Icons.show_chart_rounded,
                     activeIcon: Icons.show_chart_rounded,
-                    label: 'Activity',
+                    label: context.l10n.navActivity,
                     onTap: () => onNavTap(2),
                     pt: pt,
                   ),
@@ -339,7 +340,7 @@ class _WebSidebar extends StatelessWidget {
                     activeId: activeId,
                     icon: Icons.pie_chart_outline_rounded,
                     activeIcon: Icons.pie_chart_rounded,
-                    label: 'Insights',
+                    label: context.l10n.navInsights,
                     onTap: onInsightsTap ?? () {},
                     pt: pt,
                   ),
@@ -348,7 +349,7 @@ class _WebSidebar extends StatelessWidget {
                     activeId: activeId,
                     icon: Icons.notifications_outlined,
                     activeIcon: Icons.notifications_rounded,
-                    label: 'Notifications',
+                    label: context.l10n.navNotifications,
                     count: notificationCount > 0 ? notificationCount : null,
                     onTap: onNotificationsTap ?? () {},
                     pt: pt,
@@ -362,7 +363,7 @@ class _WebSidebar extends StatelessWidget {
                     activeId: activeId,
                     icon: Icons.person_outline_rounded,
                     activeIcon: Icons.person_rounded,
-                    label: 'Profile',
+                    label: context.l10n.navProfile,
                     onTap: () => onNavTap(3),
                     pt: pt,
                   ),
@@ -371,7 +372,7 @@ class _WebSidebar extends StatelessWidget {
                     activeId: activeId,
                     icon: Icons.settings_outlined,
                     activeIcon: Icons.settings_rounded,
-                    label: 'Settings',
+                    label: context.l10n.navSettings,
                     onTap: onSettingsTap ?? () {},
                     pt: pt,
                   ),

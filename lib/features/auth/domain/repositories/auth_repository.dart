@@ -6,6 +6,7 @@ abstract class AuthRepository {
   Future<UserEntity> createUserWithEmailAndPassword(
       String email, String password, String name);
   Future<UserEntity> signInWithGoogle();
+  Future<UserEntity> signInWithApple();
   Future<void> sendPasswordResetEmail(String email);
   Future<void> sendEmailVerification();
 
