@@ -26,18 +26,9 @@ dependencies:
   flutter_bloc: ^9.1.1
   bloc: ^9.2.0
 
-  # Hooks
-  flutter_hooks: ^0.21.3+1
-  hooks_riverpod: ^3.2.1
-
-  # DI
+  # DI & value equality
   get_it: ^9.2.1
-  injectable: ^2.4.2
-
-  # Functional Programming
-  dartz: ^0.10.1
   equatable: ^2.0.5
-  freezed_annotation: ^3.1.0
 
   # Navigation
   go_router: ^17.1.0
@@ -48,38 +39,31 @@ dependencies:
   intl: ^0.20.2
   shared_preferences: ^2.2.3
 
-  # UI
-  flutter_svg: ^2.0.10+1
-  cached_network_image: ^3.4.1
-  shimmer: ^3.0.0
-  lottie: ^3.1.2
-  flutter_animate: ^4.5.0
-
-  # Deep Links
-  app_links: ^7.0.0
-  flutter_slidable: ^4.0.3
+  # Sharing & invites (share sheet + QR code)
   share_plus: ^12.0.1
-  font_awesome_flutter: ^10.12.0
-  icons_plus: ^5.0.0
-  fl_chart: ^1.1.1
   qr_flutter: ^4.1.0
-  mobile_scanner: ^7.2.0
+
+  # Backend callables (join-by-invite-code)
+  cloud_functions: ^6.5.0
+
+  # UI & platform
+  fl_chart: ^1.1.1
   flutter_local_notifications: ^21.0.0
   google_fonts: ^8.1.0
   cupertino_icons: ^1.0.9
-  
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  build_runner: ^2.4.9
-  freezed: ^3.2.5
-  json_serializable: ^6.8.0
-  injectable_generator: ^2.4.2
   mocktail: ^1.0.4
 
 flutter:
+  config:
+    # SPM integration breaks when the project path contains a space
+    # ("Flutter Projects"); fall back to CocoaPods.
+    enable-swift-package-manager: false
   uses-material-design: true
   # assets:
     # - assets/images/

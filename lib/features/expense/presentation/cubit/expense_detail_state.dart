@@ -10,7 +10,14 @@ class ExpenseDetailLoaded extends ExpenseDetailState {
   final ExpenseEntity expense;
   final String currentUserId;
 
-  ExpenseDetailLoaded({required this.expense, required this.currentUserId});
+  /// Currency code of the group (the unit of `expense.amount` and the splits).
+  final String currency;
+
+  ExpenseDetailLoaded({
+    required this.expense,
+    required this.currentUserId,
+    this.currency = kDefaultCurrency,
+  });
 }
 
 class ExpenseDetailError extends ExpenseDetailState {

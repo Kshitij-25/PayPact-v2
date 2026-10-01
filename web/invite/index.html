@@ -238,6 +238,10 @@
     <button class="join-btn" onclick="joinOnWeb()">
       Join Group
     </button>
+    <button class="join-btn" onclick="openInApp()"
+      style="margin-top:10px;background:transparent;color:var(--primary);border:1px solid var(--primary)">
+      Open in the app
+    </button>
 
     <p class="hint">
       You'll be asked to sign in if you don't have an account yet.
@@ -249,7 +253,9 @@
   <script>
     const parts = window.location.pathname.split('/').filter(Boolean);
     const code = parts[parts.length - 1] || '';
-    const webUrl = 'https://paypact-fec8e.web.app/join/' + code;
+    // The Flutter web app uses hash routing, so the route lives after the '#'.
+    const webUrl = 'https://paypact-fec8e.web.app/#/join/' + code;
+    const appUrl = 'paypact://invite/' + code;
 
     if (code) {
       document.getElementById('codeDisplay').textContent = code;
@@ -258,6 +264,11 @@
     function joinOnWeb() {
       if (!code) return;
       window.location.href = webUrl;
+    }
+
+    function openInApp() {
+      if (!code) return;
+      window.location.href = appUrl;
     }
 
     function copyCode() {

@@ -327,6 +327,8 @@ class _ProfileBody extends StatelessWidget {
                                       _showEditName(context, userName),
                                 ),
                                 Divider(color: pt.border, height: 1),
+                                const _EmailVerificationRow(),
+                                Divider(color: pt.border, height: 1),
                                 _Row(
                                     icon: Icons.payments_outlined,
                                     label: 'Payment methods',
@@ -386,12 +388,14 @@ class _Row extends StatelessWidget {
     required this.label,
     this.sub,
     this.negative = false,
+    this.showChevron = true,
     this.onTap,
   });
   final IconData icon;
   final String label;
   final String? sub;
   final bool negative;
+  final bool showChevron;
   final VoidCallback? onTap;
 
   @override
@@ -430,10 +434,80 @@ class _Row extends StatelessWidget {
               ],
             ),
           ),
-          if (!negative)
+          if (!negative && showChevron)
             Icon(Icons.chevron_right_rounded, color: pt.ink3),
         ]),
       ),
+    );
+  }
+}
+
+
+/// Shows whether the account's email is verified and, if not, sends the link
+/// and re-checks on request. Verification is advisory — nothing is blocked on
+/// it, so existing email/password users aren't locked out.
+class _EmailVerificationRow extends StatefulWidget {
+  const _EmailVerificationRow();
+
+  @override
+  State<_EmailVerificationRow> createState() => _EmailVerificationRowState();
+}
+
+class _EmailVerificationRowState extends State<_EmailVerificationRow> {
+  late bool _verified = locator<AuthCubit>().isEmailVerified;
+  bool _sent = false;
+  bool _busy = false;
+
+  Future<void> _onTap() async {
+    if (_busy) return;
+    final auth = locator<AuthCubit>();
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      if (_sent) {
+        final verified = await auth.refreshEmailVerified();
+        if (!mounted) return;
+        setState(() => _verified = verified);
+        if (!verified) {
+          messenger.showSnackBar(SnackBar(
+            content: const Text(
+                'Not verified yet — check your inbox (and spam folder).'),
+            action: SnackBarAction(label: 'Resend', onPressed: _resend),
+          ));
+        }
+      } else {
+        await _resend();
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resend() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final error = await locator<AuthCubit>().sendEmailVerification();
+    if (!mounted) return;
+    if (error == null) setState(() => _sent = true);
+    messenger.showSnackBar(SnackBar(
+        content: Text(error ?? 'Verification email sent. Check your inbox.')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_verified) {
+      return const _Row(
+        icon: Icons.verified_outlined,
+        label: 'Email verified',
+        showChevron: false,
+      );
+    }
+    return _Row(
+      icon: Icons.mark_email_unread_outlined,
+      label: 'Verify your email',
+      sub: _sent
+          ? 'Link sent · tap once you\'ve verified'
+          : 'Tap to send a verification link',
+      onTap: _onTap,
     );
   }
 }

@@ -30,7 +30,7 @@ class SettleUpScreen extends StatelessWidget {
     required this.toUserId,
     required this.toUserName,
     required this.suggestedAmount,
-    this.currency = '₹',
+    this.currency = kDefaultCurrency,
   });
 
   final String groupId;

@@ -15,6 +15,9 @@ class ActivityItem {
   final String? expenseId;
   final String? groupId;
 
+  /// Currency code of the group the item belongs to.
+  final String currency;
+
   const ActivityItem({
     required this.id,
     required this.who,
@@ -29,6 +32,7 @@ class ActivityItem {
     required this.createdAt,
     required this.expenseId,
     required this.groupId,
+    this.currency = 'INR',
   });
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -371,7 +372,7 @@ class _WebActivityRow extends StatelessWidget {
               width: 120,
               child: Text(
                 item.amount != null
-                    ? '₹${item.amount!.toStringAsFixed(0)}'
+                    ? '${currencySymbol(item.currency)}${item.amount!.toStringAsFixed(0)}'
                     : '—',
                 textAlign: TextAlign.end,
                 style: PayPactTypography.amountMd
@@ -490,7 +491,7 @@ class _Tile extends StatelessWidget {
                     if (item.amount != null) ...[
                       const SizedBox(width: 10),
                       Text(
-                        '₹${item.amount!.toStringAsFixed(0)}',
+                        '${currencySymbol(item.currency)}${item.amount!.toStringAsFixed(0)}',
                         style: PayPactTypography.amountSm.copyWith(
                             color: amountColor,
                             fontWeight: FontWeight.w600),

@@ -5,7 +5,7 @@
         ],
         "target": {
             "namespace": "android_app",
-            "package_name": "com.paypact.app",
+            "package_name": "com.kshitijcodecraft.paypact",
             "sha256_cert_fingerprints": [
                 "B2:3B:17:1A:90:7B:89:55:27:43:0F:E7:03:57:60:E6:5B:4D:6F:54:39:B1:EC:F4:A1:00:0C:54:EE:88:78:77"
             ]

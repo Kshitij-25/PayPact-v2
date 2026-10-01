@@ -102,6 +102,37 @@ class NotificationService {
     );
   }
 
+  /// Tokens live under `users/{uid}/private/push`, readable only by their
+  /// owner (and the Cloud Functions that send pushes) — never on the public
+  /// profile document. Any legacy token on the profile is scrubbed.
+  Future<void> _writeToken(String userId, String token) async {
+    final user = _firestore.collection('users').doc(userId);
+    await user.collection('private').doc('push').set({
+      'fcmToken': token,
+      'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    await user.set({
+      'fcmToken': FieldValue.delete(),
+      'fcmTokenUpdatedAt': FieldValue.delete(),
+    }, SetOptions(merge: true));
+  }
+
+  /// Called before sign-out (while the user can still write) so the next
+  /// person to sign in on this device doesn't leave pushes going to the last.
+  Future<void> clearToken(String userId) async {
+    try {
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('private')
+          .doc('push')
+          .delete();
+      await _messaging.deleteToken();
+    } catch (_) {
+      // Best-effort; a stale token is dropped by the push function on failure.
+    }
+  }
+
   Future<void> saveToken(String userId) async {
     try {
       if (kIsWeb && !await _messaging.isSupported()) return;
@@ -114,23 +145,9 @@ class NotificationService {
 
       if (token == null) return;
 
-      await _firestore.collection('users').doc(userId).set(
-        {
-          'fcmToken': token,
-          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+      await _writeToken(userId, token);
 
-      _messaging.onTokenRefresh.listen((newToken) {
-        _firestore.collection('users').doc(userId).set(
-          {
-            'fcmToken': newToken,
-            'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      });
+      _messaging.onTokenRefresh.listen((newToken) => _writeToken(userId, newToken));
     } catch (_) {
       // Token saving is best-effort
     }

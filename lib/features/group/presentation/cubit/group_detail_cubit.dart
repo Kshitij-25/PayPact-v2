@@ -67,6 +67,7 @@ class GroupDetailCubit extends Cubit<GroupDetailState> {
       netBalance: netBalance,
       memberBalances: memberBalances,
       globalMemberBalances: globalBalances,
+      settlements: settlements,
     ));
   }
 

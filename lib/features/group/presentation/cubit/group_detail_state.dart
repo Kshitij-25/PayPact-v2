@@ -14,12 +14,16 @@ class GroupDetailLoaded extends GroupDetailState {
   /// Net balance for every member globally (positive = creditor, negative = debtor).
   final Map<String, double> globalMemberBalances;
 
+  /// Recorded settle-up payments (newest first), for the activity timeline.
+  final List<Map<String, dynamic>> settlements;
+
   GroupDetailLoaded({
     required this.group,
     required this.expenses,
     required this.netBalance,
     required this.memberBalances,
     required this.globalMemberBalances,
+    this.settlements = const [],
   });
 }
 

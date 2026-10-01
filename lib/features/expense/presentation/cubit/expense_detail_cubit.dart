@@ -1,6 +1,8 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
+import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
 
 part 'expense_detail_state.dart';
@@ -8,6 +10,7 @@ part 'expense_detail_state.dart';
 class ExpenseDetailCubit extends Cubit<ExpenseDetailState> {
   final ExpenseRepository _expenseRepo;
   final NotificationsRepository _notifRepo;
+  final GroupRepository _groupRepo;
   final String _groupId;
   final String _expenseId;
   final String _currentUserId;
@@ -15,6 +18,7 @@ class ExpenseDetailCubit extends Cubit<ExpenseDetailState> {
   ExpenseDetailCubit(
     this._expenseRepo,
     this._notifRepo,
+    this._groupRepo,
     this._groupId,
     this._expenseId,
     this._currentUserId,
@@ -28,7 +32,16 @@ class ExpenseDetailCubit extends Cubit<ExpenseDetailState> {
         emit(ExpenseDetailError('Expense not found'));
         return;
       }
-      emit(ExpenseDetailLoaded(expense: expense, currentUserId: _currentUserId));
+      // The group's currency is the unit of every amount on this screen.
+      String currency = kDefaultCurrency;
+      try {
+        currency = (await _groupRepo.getGroup(_groupId))?.currency ?? currency;
+      } catch (_) {}
+      emit(ExpenseDetailLoaded(
+        expense: expense,
+        currentUserId: _currentUserId,
+        currency: currency,
+      ));
     } catch (e) {
       emit(ExpenseDetailError(e.toString()));
     }

@@ -80,6 +80,43 @@ class FirestoreExpenseRepository implements ExpenseRepository {
   }
 
   @override
+  Future<void> updateExpense({
+    required String groupId,
+    required String expenseId,
+    required String title,
+    required double amount,
+    required double originalAmount,
+    required String originalCurrency,
+    required double exchangeRate,
+    required String category,
+    required String paidById,
+    required String paidByName,
+    required List<ExpenseSplitEntity> splits,
+  }) async {
+    final model = ExpenseModel(
+      id: expenseId,
+      groupId: groupId,
+      title: title,
+      amount: amount,
+      originalAmount: originalAmount,
+      originalCurrency: originalCurrency,
+      exchangeRate: exchangeRate,
+      category: category,
+      paidById: paidById,
+      paidByName: paidByName,
+      splits: splits,
+      createdAt: DateTime.now(),
+      createdById: '',
+    );
+    await _expensesRef(groupId).doc(expenseId).update(model.toUpdateMap());
+    // Touch the group document so watchUserGroups fires and balances refresh
+    await _firestore
+        .collection('groups')
+        .doc(groupId)
+        .update({'updatedAt': FieldValue.serverTimestamp()});
+  }
+
+  @override
   Future<void> deleteExpense(String groupId, String expenseId) async {
     await _expensesRef(groupId).doc(expenseId).delete();
   }

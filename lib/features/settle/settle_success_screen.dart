@@ -1,5 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/navigation/app_router.dart';
@@ -20,7 +22,7 @@ class SettleSuccessScreen extends StatelessWidget {
     required this.amount,
     required this.receiptId,
     this.groupName = '',
-    this.currency = '₹',
+    this.currency = kDefaultCurrency,
   });
 
   final String groupId;
@@ -42,6 +44,29 @@ class SettleSuccessScreen extends StatelessWidget {
 
   String get _dateStr =>
       DateFormat('MMM d, yyyy · h:mm a').format(DateTime.now());
+
+  /// Plain-text receipt through the system share sheet (copied to the
+  /// clipboard where sharing isn't available).
+  Future<void> _shareReceipt(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final box = context.findRenderObject() as RenderBox?;
+    final text = 'PayPact receipt $receiptId\n'
+        '$fromUserName paid $toUserName $_amountStr in $groupName\n'
+        '$_dateStr';
+    try {
+      final result = await SharePlus.instance.share(ShareParams(
+        text: text,
+        subject: 'PayPact receipt $receiptId',
+        sharePositionOrigin: box != null && box.hasSize
+            ? box.localToGlobal(Offset.zero) & box.size
+            : null,
+      ));
+      if (result.status != ShareResultStatus.unavailable) return;
+    } catch (_) {}
+    await Clipboard.setData(ClipboardData(text: text));
+    messenger.showSnackBar(
+        const SnackBar(content: Text('Receipt copied to clipboard')));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -346,11 +371,7 @@ class SettleSuccessScreen extends StatelessWidget {
                           children: [
                             Expanded(
                               child: PayPactButton(
-                                onPressed: () =>
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                            content: Text(
-                                                'Share receipt — coming soon'))),
+                                onPressed: () => _shareReceipt(context),
                                 label: 'Share receipt',
                                 variant: PayPactButtonVariant.secondary,
                                 size: PayPactButtonSize.large,

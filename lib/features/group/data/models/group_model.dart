@@ -12,6 +12,8 @@ class GroupModel extends GroupEntity {
     required super.memberNames,
     required super.createdBy,
     required super.createdAt,
+    super.adminIds,
+    super.inviteCode,
     super.netBalance,
   });
 
@@ -20,6 +22,11 @@ class GroupModel extends GroupEntity {
     final memberIds = List<String>.from(data['memberIds'] as List? ?? []);
     final memberNamesRaw = data['memberNames'] as Map<String, dynamic>? ?? {};
     final memberNames = memberNamesRaw.map((k, v) => MapEntry(k, v as String));
+    final createdBy = data['createdBy'] as String? ?? '';
+    // Groups created before admin roles existed only have a creator.
+    final adminIds = data['adminIds'] is List
+        ? List<String>.from(data['adminIds'] as List)
+        : <String>[createdBy];
     return GroupModel(
       id: doc.id,
       name: data['name'] as String? ?? '',
@@ -28,7 +35,9 @@ class GroupModel extends GroupEntity {
       currency: data['currency'] as String? ?? 'INR',
       memberIds: memberIds,
       memberNames: memberNames,
-      createdBy: data['createdBy'] as String? ?? '',
+      createdBy: createdBy,
+      adminIds: adminIds,
+      inviteCode: data['inviteCode'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -41,6 +50,8 @@ class GroupModel extends GroupEntity {
         'memberIds': memberIds,
         'memberNames': memberNames,
         'createdBy': createdBy,
+        'adminIds': adminIds,
+        if (inviteCode != null) 'inviteCode': inviteCode,
         'createdAt': FieldValue.serverTimestamp(),
       };
 }

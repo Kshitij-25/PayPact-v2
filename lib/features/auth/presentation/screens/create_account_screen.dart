@@ -94,9 +94,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
     return BlocConsumer<AuthCubit, AuthState>(
       listener: (context, state) {
-        if (state is AuthAuthenticated) {
-          context.go(AppRoutes.home);
-        } else if (state is AuthError) {
+        // On success the router's auth guard moves us on (to home, or to an
+        // invite link the user arrived with), so there's nothing to do here.
+        if (state is AuthError) {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text(state.message)));
         }

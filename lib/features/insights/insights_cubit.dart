@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:paypact/core/utils/default_currency.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
@@ -247,7 +248,7 @@ class InsightsCubit extends Cubit<InsightsState> {
           .toList()
         ..sort((a, b) => b.velocity.compareTo(a.velocity));
 
-      final symbol = groups.isNotEmpty ? currencySymbol(groups.first.currency) : '₹';
+      final symbol = groups.isNotEmpty ? currencySymbol(groups.first.currency) : currencySymbol(userDefaultCurrency());
 
       emit(InsightsLoaded(
         filterLabel: _filterLabel(period, groups.length),

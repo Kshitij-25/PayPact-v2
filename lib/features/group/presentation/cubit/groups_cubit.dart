@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/services/exchange_rate_service.dart';
+import 'package:paypact/core/utils/default_currency.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
@@ -10,11 +13,38 @@ part 'groups_state.dart';
 class GroupsCubit extends Cubit<GroupsState> {
   final GroupRepository _groupRepo;
   final ExpenseRepository _expenseRepo;
+  final ExchangeRateService? _rates;
+  final String Function()? _defaultCurrency;
   String _userId;
   StreamSubscription<List<GroupEntity>>? _sub;
 
-  GroupsCubit(this._groupRepo, this._expenseRepo, this._userId)
-      : super(GroupsInitial());
+  /// [rates] / [defaultCurrency] default to the app-wide service and the
+  /// user's Settings choice; tests inject their own.
+  GroupsCubit(this._groupRepo, this._expenseRepo, this._userId,
+      {ExchangeRateService? rates, String Function()? defaultCurrency})
+      : _rates = rates,
+        _defaultCurrency = defaultCurrency,
+        super(GroupsInitial());
+
+  /// Rate from each group currency into [target]. Groups whose rate can't be
+  /// fetched are left out (treated 1:1) rather than failing the whole screen.
+  Future<Map<String, double>> _ratesInto(
+      String target, Iterable<String> currencies) async {
+    final out = <String, double>{};
+    ExchangeRateService svc;
+    try {
+      svc = _rates ?? locator<ExchangeRateService>();
+    } catch (_) {
+      return out;
+    }
+    for (final c in currencies.toSet()) {
+      if (c == target) continue;
+      try {
+        out[c] = await svc.getRate(c, target);
+      } catch (_) {}
+    }
+    return out;
+  }
 
   /// Switch the active user (used by the global instance on sign in/out)
   /// and reload, without tearing down the widget tree.
@@ -42,7 +72,15 @@ class GroupsCubit extends Cubit<GroupsState> {
           }),
         );
 
-        final total = groups.fold<double>(0, (sum, g) => sum + g.netBalance);
+        // Cross-group totals are shown in the user's default currency; each
+        // group's own balance stays in that group's currency.
+        final target = (_defaultCurrency ?? userDefaultCurrency)();
+        final toTarget =
+            await _ratesInto(target, groups.map((g) => g.currency));
+        double rate(String c) => toTarget[c] ?? 1.0;
+
+        final total = groups.fold<double>(
+            0, (sum, g) => sum + g.netBalance * rate(g.currency));
 
         final now = DateTime.now();
         final weekStart = DateTime(now.year, now.month, now.day - (now.weekday - 1));
@@ -63,6 +101,7 @@ class GroupsCubit extends Cubit<GroupsState> {
 
         for (final (group, expenses, settlements) in results) {
           // Per-group metadata: total spent, count, last activity
+          double groupWeekly = 0; // this group's week delta, in its currency
           double groupTotal = 0;
           DateTime? lastAt;
           String lastTitle = '';
@@ -105,9 +144,9 @@ class GroupsCubit extends Cubit<GroupsState> {
             if (!e.createdAt.isBefore(weekStart)) {
               final myShare = e.splitAmountFor(_userId);
               if (e.paidById == _userId) {
-                weeklyDelta += (e.amount - myShare);
+                groupWeekly += (e.amount - myShare);
               } else {
-                weeklyDelta -= myShare;
+                groupWeekly -= myShare;
               }
             }
 
@@ -150,9 +189,9 @@ class GroupsCubit extends Cubit<GroupsState> {
             // Weekly delta for settlements
             if (settledAt != null && !settledAt.isBefore(weekStart)) {
               if (toId == _userId) {
-                weeklyDelta -= amount;
+                groupWeekly -= amount;
               } else if (fromId == _userId) {
-                weeklyDelta += amount;
+                groupWeekly += amount;
               }
             }
 
@@ -174,6 +213,8 @@ class GroupsCubit extends Cubit<GroupsState> {
               }
             }
           }
+
+          weeklyDelta += groupWeekly * rate(group.currency);
         }
 
         // Net per-member balance (positive = they owe me, negative = I owe them)

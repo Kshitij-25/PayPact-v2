@@ -6,6 +6,15 @@ abstract class AuthRepository {
   Future<UserEntity> createUserWithEmailAndPassword(
       String email, String password, String name);
   Future<UserEntity> signInWithGoogle();
+  Future<void> sendPasswordResetEmail(String email);
+  Future<void> sendEmailVerification();
+
+  /// True when the signed-in account's email is verified. Non-password
+  /// sign-ins (Google) are verified by the provider.
+  bool get isEmailVerified;
+
+  /// Re-reads the account from Firebase and returns the fresh verified flag.
+  Future<bool> reloadEmailVerified();
   Future<void> signOut();
   UserEntity? get currentUser;
 }

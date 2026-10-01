@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/navigation/app_router.dart';
+import 'package:paypact/core/services/nudge_service.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/adaptive_nav_scaffold.dart';
@@ -17,7 +18,36 @@ import 'package:paypact/features/expense/domain/repositories/expense_repository.
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/group/presentation/cubit/groups_cubit.dart';
+import 'package:paypact/features/group/presentation/widgets/invite_sheet.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
+
+/// Sends the smart nudge and reports the real outcome (it used to just claim
+/// success). Dismisses the card either way once the attempt is made.
+Future<void> _sendNudge(BuildContext context, SmartNudgeData nudge,
+    VoidCallback dismiss) async {
+  final auth = context.read<AuthCubit>().state;
+  if (auth is! AuthAuthenticated) return;
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await locator<NudgeService>().send(
+        nudge: nudge, actorId: auth.user.id, actorName: auth.user.name);
+    dismiss();
+    messenger.showSnackBar(SnackBar(
+      content: Text('Reminder sent to ${nudge.memberName}.'),
+      behavior: SnackBarBehavior.floating,
+    ));
+  } catch (_) {
+    messenger.showSnackBar(const SnackBar(
+      content: Text("Couldn't send the reminder. Try again."),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+}
+
+String _currentUserId(BuildContext context) {
+  final s = context.read<AuthCubit>().state;
+  return s is AuthAuthenticated ? s.user.id : '';
+}
 
 String _fmtAmt(double amount, String symbol) {
   final n = amount.round().abs();
@@ -100,7 +130,13 @@ class _HomeBodyState extends State<_HomeBody> {
         final totalBalance =
             state is GroupsLoaded ? state.totalNetBalance : 0.0;
         final weeklyDelta = state is GroupsLoaded ? state.weeklyDelta : 0.0;
-        final nudge = state is GroupsLoaded ? state.smartNudge : null;
+        final rawNudge = state is GroupsLoaded ? state.smartNudge : null;
+        // Don't re-offer a nudge for someone we've already nudged recently.
+        final nudge = rawNudge != null &&
+                authState is AuthAuthenticated &&
+                !locator<NudgeService>().canNudge(authState.user.id, rawNudge)
+            ? null
+            : rawNudge;
         final recentExpenses = state is GroupsLoaded
             ? state.recentExpenses
             : <RecentExpenseItem>[];
@@ -352,15 +388,7 @@ class _MobileHomeBody extends StatelessWidget {
                   child: _SmartNudgeCard(
                     nudge: nudge!,
                     onLater: onDismissNudge,
-                    onNudge: () {
-                      onDismissNudge();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Nudge sent to ${nudge!.memberName}!'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
+                    onNudge: () => _sendNudge(context, nudge!, onDismissNudge),
                   ),
                 ),
               ],
@@ -760,15 +788,7 @@ class _WebHomeBody extends StatelessWidget {
                     nudge: nudge!,
                     dark: true,
                     onLater: onDismissNudge,
-                    onNudge: () {
-                      onDismissNudge();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Nudge sent to ${nudge!.memberName}!'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
+                    onNudge: () => _sendNudge(context, nudge!, onDismissNudge),
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -802,11 +822,10 @@ class _WebHomeBody extends StatelessWidget {
                       _QuickAction(
                         icon: Icons.ios_share_rounded,
                         label: 'Share invite',
-                        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Share invite — coming soon'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
+                        onTap: () => showInviteForGroups(
+                          context,
+                          groups: groups,
+                          currentUserId: _currentUserId(context),
                         ),
                         pt: pt,
                       ),
@@ -907,10 +926,12 @@ class _WebHomeBody extends StatelessWidget {
                                             letterSpacing: 1.0)),
                                     const SizedBox(height: 1),
                                     Text(
-                                      PpAmount.format(memberBalances[i]
-                                          .netBalance
-                                          .abs()
-                                          .round()),
+                                      PpAmount.format(
+                                          memberBalances[i]
+                                              .netBalance
+                                              .abs()
+                                              .round(),
+                                          currency: memberBalances[i].currency),
                                       style:
                                           PayPactTypography.amountMd.copyWith(
                                         color: memberBalances[i].netBalance >= 0
@@ -1415,7 +1436,8 @@ class _GroupTile extends StatelessWidget {
           Text(
             group.netBalance.abs() <= 0.5
                 ? '—'
-                : PpAmount.format(group.netBalance.abs().round()),
+                : PpAmount.format(group.netBalance.abs().round(),
+                    currency: group.currency),
             style: PayPactTypography.amountLg.copyWith(
               fontSize: 18,
               color: group.netBalance.abs() <= 0.5
@@ -1503,7 +1525,8 @@ class _WebGroupTile extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            PpAmount.format(group.netBalance.abs().round()),
+            PpAmount.format(group.netBalance.abs().round(),
+                currency: group.currency),
             style: PayPactTypography.amountLg
                 .copyWith(fontSize: 20, color: amtColor),
           ),

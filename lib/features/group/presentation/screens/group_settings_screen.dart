@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:paypact/core/constants/app_links.dart';
 import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
+import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
+import 'package:paypact/features/group/presentation/widgets/invite_sheet.dart';
+import 'package:paypact/features/notification/domain/repositories/notification_prefs_repository.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/group/presentation/cubit/group_settings_cubit.dart';
 import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
@@ -24,6 +28,7 @@ class GroupSettingsScreen extends StatelessWidget {
       create: (_) => GroupSettingsCubit(
             locator<GroupRepository>(),
             locator<NotificationsRepository>(),
+            locator<ExpenseRepository>(),
             groupId,
           )..load(),
       child: _GroupSettingsBody(groupId: groupId),
@@ -97,8 +102,13 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
             const SnackBar(content: Text('Saved')),
           );
         }
-        if (state is GroupSettingsDeleted) {
+        if (state is GroupSettingsDeleted || state is GroupSettingsLeft) {
           context.go('/');
+        }
+        if (state is GroupSettingsNotice) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.message)),
+          );
         }
         if (state is GroupSettingsError) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -111,20 +121,34 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
         if (state is GroupSettingsLoaded) group = state.group;
         if (state is GroupSettingsSaving) group = state.group;
         if (state is GroupSettingsSaved) group = state.group;
+        if (state is GroupSettingsNotice) group = state.group;
+        if (state is GroupSettingsError) group = state.group;
 
         if (group != null) _syncFromGroup(group);
 
-        final loading =
-            state is GroupSettingsLoading || state is GroupSettingsInitial;
+        final loading = state is GroupSettingsLoading ||
+            state is GroupSettingsInitial ||
+            state is GroupSettingsDeleted ||
+            state is GroupSettingsLeft;
         final saving = state is GroupSettingsSaving;
-        final isAdmin = group?.createdBy == currentUserId;
+        final isAdmin = group?.isAdmin(currentUserId) ?? false;
 
         return Scaffold(
           backgroundColor: pt.bg,
           body: loading
               ? const Center(child: CircularProgressIndicator())
-              : _buildContent(context, pt, group!, isAdmin, saving,
-                  currentUserId, currentUserName),
+              : group == null
+                  ? Center(
+                      child: Text(
+                        state is GroupSettingsError
+                            ? state.message
+                            : 'Group not found',
+                        style: PayPactTypography.bodyMd
+                            .copyWith(color: pt.ink2),
+                      ),
+                    )
+                  : _buildContent(context, pt, group, isAdmin, saving,
+                      currentUserId, currentUserName),
         );
       },
     );
@@ -175,16 +199,24 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
                         isAdmin: isAdmin,
                         onRemove: (uid) => _confirmRemove(
                             context, group, uid, currentUserId, currentUserName),
+                        onSetAdmin: (uid, makeAdmin) =>
+                            context.read<GroupSettingsCubit>().setAdmin(
+                                  uid,
+                                  isAdmin: makeAdmin,
+                                  actorId: currentUserId,
+                                  actorName: currentUserName,
+                                ),
                         onAddMembers: () => context.push(
                             '/group/add-members',
                             extra: {'groupId': group.id}),
                       ),
                       const SizedBox(height: 28),
-                      _InviteSection(groupId: group.id, groupName: group.name),
+                      _InviteSection(group: group, currentUserId: currentUserId),
                       const SizedBox(height: 28),
                       _PreferencesSection(
                         group: group,
                         isAdmin: isAdmin,
+                        currentUserId: currentUserId,
                         onDelete: () => _confirmDelete(
                             context, currentUserId, currentUserName),
                         onLeave: () => _confirmLeave(
@@ -396,7 +428,8 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Leave group'),
-        content: const Text('You will be removed from this group.'),
+        content: const Text(
+            'You will be removed from this group. You can rejoin later with an invite link.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -404,10 +437,9 @@ class _GroupSettingsBodyState extends State<_GroupSettingsBody> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.read<GroupSettingsCubit>().removeMember(
-                    userId,
-                    actorId: userId,
-                    actorName: actorName,
+              context.read<GroupSettingsCubit>().leave(
+                    userId: userId,
+                    userName: actorName,
                   );
             },
             child: Text('Leave',
@@ -621,12 +653,14 @@ class _MembersSection extends StatelessWidget {
     required this.currentUserId,
     required this.isAdmin,
     required this.onRemove,
+    required this.onSetAdmin,
     required this.onAddMembers,
   });
   final GroupEntity group;
   final String currentUserId;
   final bool isAdmin;
   final void Function(String uid) onRemove;
+  final void Function(String uid, bool makeAdmin) onSetAdmin;
   final VoidCallback onAddMembers;
 
   @override
@@ -676,11 +710,14 @@ class _MembersSection extends StatelessWidget {
                   name: group.memberNames[memberId] ?? memberId,
                   isCurrentUser: memberId == currentUserId,
                   isCreator: memberId == group.createdBy,
-                  isAdmin: isAdmin,
+                  isMemberAdmin: group.isAdmin(memberId),
+                  viewerIsAdmin: isAdmin,
                   showDivider: !isLast,
                   onRemove: memberId != currentUserId
                       ? () => onRemove(memberId)
                       : null,
+                  onToggleAdmin: () =>
+                      onSetAdmin(memberId, !group.isAdmin(memberId)),
                 );
               }),
               // Add members row
@@ -706,16 +743,24 @@ class _MemberRow extends StatelessWidget {
     required this.name,
     required this.isCurrentUser,
     required this.isCreator,
-    required this.isAdmin,
+    required this.isMemberAdmin,
+    required this.viewerIsAdmin,
     required this.showDivider,
     this.onRemove,
+    this.onToggleAdmin,
   });
   final String name;
   final bool isCurrentUser;
   final bool isCreator;
-  final bool isAdmin;
+
+  /// This member holds the admin role.
+  final bool isMemberAdmin;
+
+  /// The person looking at the screen is an admin (can manage this member).
+  final bool viewerIsAdmin;
   final bool showDivider;
   final VoidCallback? onRemove;
+  final VoidCallback? onToggleAdmin;
 
   @override
   Widget build(BuildContext context) {
@@ -739,7 +784,7 @@ class _MemberRow extends StatelessWidget {
                             style: PayPactTypography.bodyMd.copyWith(
                                 color: pt.ink,
                                 fontWeight: FontWeight.w600)),
-                        if (isCreator) ...[
+                        if (isMemberAdmin) ...[
                           const SizedBox(width: 6),
                           _Badge(label: 'ADMIN', tone: _BadgeTone.accent),
                         ],
@@ -747,18 +792,20 @@ class _MemberRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      isCurrentUser
-                          ? 'That\'s you'
-                          : isCreator
-                              ? 'Group admin'
-                              : name.split(' ').first,
+                      isCreator
+                          ? (isCurrentUser ? 'You created this group' : 'Group creator')
+                          : isCurrentUser
+                              ? 'That\'s you'
+                              : isMemberAdmin
+                                  ? 'Group admin'
+                                  : name.split(' ').first,
                       style: PayPactTypography.bodySm
                           .copyWith(color: pt.ink3),
                     ),
                   ],
                 ),
               ),
-              if (!isCurrentUser && isAdmin)
+              if (!isCurrentUser && viewerIsAdmin)
                 GestureDetector(
                   onTap: () => _showMenu(context),
                   child: Padding(
@@ -798,11 +845,24 @@ class _MemberRow extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             _BottomSheetAction(
+              icon: isMemberAdmin
+                  ? Icons.remove_moderator_outlined
+                  : Icons.admin_panel_settings_outlined,
+              label: isMemberAdmin
+                  ? 'Remove $name as admin'
+                  : 'Make $name an admin',
+              color: pt.ink,
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                onToggleAdmin?.call();
+              },
+            ),
+            _BottomSheetAction(
               icon: Icons.person_remove_outlined,
               label: 'Remove $name',
               color: pt.negative,
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(sheetCtx);
                 onRemove?.call();
               },
             ),
@@ -851,16 +911,18 @@ class _AddMembersRow extends StatelessWidget {
 // ── Invite section ────────────────────────────────────────────────────────────
 
 class _InviteSection extends StatelessWidget {
-  const _InviteSection({required this.groupId, required this.groupName});
-  final String groupId;
-  final String groupName;
-
-  String get _link =>
-      'paypact.link/${groupName.toLowerCase().replaceAll(' ', '-')}';
+  const _InviteSection({required this.group, required this.currentUserId});
+  final GroupEntity group;
+  final String currentUserId;
 
   @override
   Widget build(BuildContext context) {
     final pt = context.pt;
+    final code = group.inviteCode;
+    final isAdmin = group.isAdmin(currentUserId);
+    void open() =>
+        showInviteSheet(context, group: group, currentUserId: currentUserId);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -868,59 +930,60 @@ class _InviteSection extends StatelessWidget {
             style: PayPactTypography.label
                 .copyWith(color: pt.ink3, letterSpacing: 1.5)),
         const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: pt.surface,
-            borderRadius: PayPactRadius.lg,
-            border: Border.all(color: pt.border),
-            boxShadow: pt.shadowSm,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: pt.surfaceAlt,
-                  borderRadius: PayPactRadius.md,
+        GestureDetector(
+          onTap: open,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: pt.surface,
+              borderRadius: PayPactRadius.lg,
+              border: Border.all(color: pt.border),
+              boxShadow: pt.shadowSm,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: pt.surfaceAlt,
+                    borderRadius: PayPactRadius.md,
+                  ),
+                  child:
+                      Icon(Icons.qr_code_rounded, color: pt.ink2, size: 20),
                 ),
-                child: Icon(Icons.qr_code_rounded,
-                    color: pt.ink2, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_link,
-                        style: PayPactTypography.bodyMd.copyWith(
-                            color: pt.ink, fontWeight: FontWeight.w600),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text('Anyone with the link can request to join',
-                        style: PayPactTypography.bodySm
-                            .copyWith(color: pt.ink3)),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          code != null
+                              ? AppLinks.invite(code)
+                                  .replaceFirst('https://', '')
+                              : isAdmin
+                                  ? 'Create an invite link'
+                                  : 'No invite link yet',
+                          style: PayPactTypography.bodyMd.copyWith(
+                              color: pt.ink, fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text('Anyone with the link can join this group',
+                          style: PayPactTypography.bodySm
+                              .copyWith(color: pt.ink3)),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: _link));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Link copied')),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: pt.accentSoft,
                     borderRadius: PayPactRadius.full,
-                    border: Border.all(
-                        color: pt.accent.withValues(alpha: 0.3)),
+                    border:
+                        Border.all(color: pt.accent.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -935,8 +998,8 @@ class _InviteSection extends StatelessWidget {
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -950,11 +1013,13 @@ class _PreferencesSection extends StatelessWidget {
   const _PreferencesSection({
     required this.group,
     required this.isAdmin,
+    required this.currentUserId,
     required this.onDelete,
     required this.onLeave,
   });
   final GroupEntity group;
   final bool isAdmin;
+  final String currentUserId;
   final VoidCallback onDelete;
   final VoidCallback onLeave;
 
@@ -977,24 +1042,21 @@ class _PreferencesSection extends StatelessWidget {
           ),
           child: Column(
             children: [
+              _MuteRow(groupId: group.id, userId: currentUserId),
               _PrefRow(
-                icon: Icons.notifications_outlined,
-                label: 'Notifications',
-                trailing: Switch(
-                  value: true,
-                  onChanged: (_) {},
-                  activeThumbColor: pt.accent,
-                  activeTrackColor: pt.accentSoft,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
+                icon: Icons.currency_exchange_rounded,
+                label: 'Currency',
+                trailing: Text(
+                    '${currencySymbol(group.currency)} ${group.currency}',
+                    style: PayPactTypography.bodySm
+                        .copyWith(color: pt.ink3)),
                 showDivider: true,
               ),
               _PrefRow(
-                icon: Icons.currency_rupee_rounded,
-                label: 'Currency',
-                trailing: Text(group.currency,
-                    style: PayPactTypography.bodySm
-                        .copyWith(color: pt.ink3)),
+                icon: Icons.logout_rounded,
+                label: 'Leave group',
+                color: pt.negative,
+                onTap: onLeave,
                 showDivider: isAdmin,
               ),
               if (isAdmin)
@@ -1004,19 +1066,79 @@ class _PreferencesSection extends StatelessWidget {
                   color: pt.negative,
                   onTap: onDelete,
                   showDivider: false,
-                )
-              else
-                _PrefRow(
-                  icon: Icons.logout_rounded,
-                  label: 'Leave group',
-                  color: pt.negative,
-                  onTap: onLeave,
-                  showDivider: false,
                 ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Per-group notification mute, stored on the user's profile so other
+/// members' devices honour it when they notify you.
+class _MuteRow extends StatefulWidget {
+  const _MuteRow({required this.groupId, required this.userId});
+  final String groupId;
+  final String userId;
+
+  @override
+  State<_MuteRow> createState() => _MuteRowState();
+}
+
+class _MuteRowState extends State<_MuteRow> {
+  bool _notify = true;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final muted = await locator<NotificationPrefsRepository>()
+          .loadMutedGroups(widget.userId);
+      if (mounted) {
+        setState(() {
+          _notify = !muted.contains(widget.groupId);
+          _loaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true);
+    }
+  }
+
+  Future<void> _set(bool notify) async {
+    final previous = _notify;
+    setState(() => _notify = notify);
+    try {
+      await locator<NotificationPrefsRepository>()
+          .setGroupMuted(widget.userId, widget.groupId, !notify);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _notify = previous);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Couldn't update notifications. Try again.")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    return _PrefRow(
+      icon: Icons.notifications_outlined,
+      label: 'Notifications',
+      trailing: Switch(
+        value: _notify,
+        onChanged: _loaded ? _set : null,
+        activeThumbColor: pt.accent,
+        activeTrackColor: pt.accentSoft,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      showDivider: true,
     );
   }
 }

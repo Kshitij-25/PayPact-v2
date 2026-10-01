@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
@@ -82,7 +83,7 @@ class SettleCubit extends Cubit<SettleState> {
         type: 'settlement',
         title: '$fromUserName settled up',
         body:
-            '$fromUserName paid you ₹${amount.toStringAsFixed(0)} in $groupName',
+            '$fromUserName paid you ${currencySymbol(group.currency)}${amount.toStringAsFixed(0)} in $groupName',
         groupId: groupId,
         groupName: groupName,
         actorId: fromUserId,

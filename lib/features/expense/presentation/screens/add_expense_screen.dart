@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
+import 'package:paypact/core/utils/default_currency.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
@@ -12,6 +13,7 @@ import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
+import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/expense/presentation/cubit/add_expense_cubit.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
@@ -20,21 +22,25 @@ import 'package:paypact/widgets/pp_atoms.dart';
 typedef _SplitResult = ({String splitType, Map<String, double> customSplits});
 
 class AddExpenseScreen extends StatelessWidget {
-  const AddExpenseScreen({super.key, this.groupId});
+  const AddExpenseScreen({super.key, this.groupId, this.expenseId});
   final String? groupId;
+
+  /// When set, the screen edits this expense instead of creating a new one.
+  final String? expenseId;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) => AddExpenseCubit(locator(), locator(), locator()),
-      child: _AddExpenseBody(groupId: groupId),
+      child: _AddExpenseBody(groupId: groupId, expenseId: expenseId),
     );
   }
 }
 
 class _AddExpenseBody extends StatefulWidget {
-  const _AddExpenseBody({this.groupId});
+  const _AddExpenseBody({this.groupId, this.expenseId});
   final String? groupId;
+  final String? expenseId;
 
   @override
   State<_AddExpenseBody> createState() => _AddExpenseBodyState();
@@ -45,10 +51,15 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
   final _amountCtrl = TextEditingController();
 
   String _selectedCategory = 'food';
-  String _groupCurrency = kDefaultCurrency;
-  String _selectedCurrency = kDefaultCurrency;
+  // Until the group loads, start from the user's default currency.
+  String _groupCurrency = userDefaultCurrency();
+  String _selectedCurrency = userDefaultCurrency();
 
   GroupEntity? _group;
+
+  /// The group being added to. Starts as the route's group; the Group row lets
+  /// the user switch (new expenses only).
+  String? _groupId;
   String _paidById = '';
   String _paidByName = '';
 
@@ -56,6 +67,11 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
   Map<String, double> _customSplits = {};
 
   bool _useYesterday = false;
+
+  /// The expense being edited; null when creating.
+  ExpenseEntity? _existing;
+  bool get _isEdit => widget.expenseId != null;
+  String get _heading => _isEdit ? 'Edit expense' : 'New expense';
 
   static const _cats = [
     _CatChoice('Food', '🍽', PpCategory.food, 'food'),
@@ -69,11 +85,12 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
   @override
   void initState() {
     super.initState();
+    _groupId = widget.groupId;
     _loadGroup();
   }
 
   Future<void> _loadGroup() async {
-    final gid = widget.groupId;
+    final gid = _groupId;
     if (gid == null) return;
     final group = await locator<GroupRepository>().getGroup(gid);
     if (!mounted || group == null) return;
@@ -90,6 +107,55 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
       _selectedCurrency = group.currency;
       _paidById = currentUserId;
       _paidByName = currentUserName;
+      _splitType = 'equally';
+      _customSplits = {};
+    });
+
+    if (_isEdit) await _loadExpenseForEdit(gid, group);
+  }
+
+  Future<void> _loadExpenseForEdit(String gid, GroupEntity group) async {
+    final expense =
+        await locator<ExpenseRepository>().getExpense(gid, widget.expenseId!);
+    if (!mounted) return;
+    if (expense == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Expense not found')));
+      context.pop();
+      return;
+    }
+
+    // Splits are stored in the group currency; the form works in the currency
+    // the expense was entered in.
+    final rate = expense.exchangeRate == 0 ? 1.0 : expense.exchangeRate;
+    double toEntered(double v) => double.parse((v / rate).toStringAsFixed(2));
+
+    // Stored expenses don't record how they were split, so recover it:
+    // identical shares across every current member means "equally",
+    // anything else is shown as exact amounts.
+    final memberIds = group.memberNames.keys.toSet();
+    final splitIds = expense.splits.map((s) => s.userId).toSet();
+    final first = expense.splits.isEmpty ? 0.0 : expense.splits.first.amount;
+    final isEqual = expense.splits.isNotEmpty &&
+        splitIds.length == memberIds.length &&
+        splitIds.containsAll(memberIds) &&
+        expense.splits.every((s) => (s.amount - first).abs() <= 0.011);
+
+    setState(() {
+      _existing = expense;
+      _titleCtrl.text = expense.title;
+      final amt = expense.originalAmount;
+      _amountCtrl.text = amt.truncateToDouble() == amt
+          ? amt.toStringAsFixed(0)
+          : amt.toString();
+      _selectedCurrency = expense.originalCurrency;
+      _selectedCategory = expense.category;
+      _paidById = expense.paidById;
+      _paidByName = expense.paidByName;
+      _splitType = isEqual ? 'equally' : 'exact';
+      _customSplits = isEqual
+          ? {}
+          : {for (final s in expense.splits) s.userId: toEntered(s.amount)};
     });
   }
 
@@ -238,6 +304,68 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     );
   }
 
+  Future<void> _pickGroup() async {
+    if (_isEdit) return; // an existing expense stays in its group
+    final auth = context.read<AuthCubit>().state;
+    if (auth is! AuthAuthenticated) return;
+    final groups =
+        await locator<GroupRepository>().watchUserGroups(auth.user.id).first;
+    if (!mounted) return;
+    if (groups.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("You're only in one group — create another to switch.")));
+      return;
+    }
+    final pt = context.pt;
+    final picked = await showModalBottomSheet<GroupEntity>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        decoration: BoxDecoration(
+          color: pt.bg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Add to which group?',
+                  style: PayPactTypography.headingMd.copyWith(color: pt.ink)),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final g in groups)
+                      ListTile(
+                        leading:
+                            Text(g.emoji, style: const TextStyle(fontSize: 24)),
+                        title: Text(g.name,
+                            style: PayPactTypography.bodyMd
+                                .copyWith(color: pt.ink)),
+                        trailing: g.id == _groupId
+                            ? Icon(Icons.check_rounded, color: pt.accent)
+                            : null,
+                        onTap: () => Navigator.pop(ctx, g),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || picked.id == _groupId) return;
+    // A different group means different members and currency, so the form's
+    // payer and split start over.
+    _groupId = picked.id;
+    await _loadGroup();
+  }
+
   void _pickPaidBy() {
     final members = _group?.memberNames ?? {};
     if (members.isEmpty) return;
@@ -342,7 +470,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                   ),
                 ),
 
-                // Header: Cancel | New expense | Save
+                // Header: Cancel | New/Edit expense | Save
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
@@ -354,7 +482,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                                 .copyWith(color: pt.ink3)),
                       ),
                       const Spacer(),
-                      Text('New expense',
+                      Text(_heading,
                           style: PayPactTypography.headingMd
                               .copyWith(color: pt.ink)),
                       const Spacer(),
@@ -526,7 +654,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                   label: 'Group',
                   value: _group?.name ?? 'Loading…',
                   pt: pt,
-                  onTap: null,
+                  onTap: _isEdit ? null : _pickGroup,
                 ),
 
                 Divider(height: 1, color: pt.border, indent: 56),
@@ -711,7 +839,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     final authState = context.read<AuthCubit>().state;
     if (authState is! AuthAuthenticated) return;
 
-    final gid = widget.groupId;
+    final gid = _groupId;
     if (gid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No group selected')));
@@ -722,6 +850,37 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
     final uiSplits = _buildUiSplits(parsedAmount);
 
     if (!mounted) return;
+
+    final existing = _existing;
+    if (_isEdit) {
+      // Still loading the expense being edited — saving now would drop it.
+      if (existing == null || _group == null) return;
+      // Members may have joined/left since the expense was recorded; make
+      // sure the edited split still adds up before overwriting it.
+      final splitTotal = uiSplits.fold(0.0, (a, s) => a + s.amount);
+      if (parsedAmount > 0 && (splitTotal - parsedAmount).abs() > 0.05) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                "The split doesn't add up to the total — adjust the split.")));
+        return;
+      }
+      context.read<AddExpenseCubit>().updateExpense(
+            existing: existing,
+            groupCurrency: _groupCurrency,
+            groupName: _group!.name,
+            title: _titleCtrl.text,
+            amount: parsedAmount,
+            originalCurrency: _selectedCurrency,
+            category: _selectedCategory,
+            paidById: _paidById,
+            paidByName: _paidByName,
+            splits: uiSplits,
+            currentUserId: authState.user.id,
+            currentUserName: authState.user.name,
+          );
+      return;
+    }
+
     context.read<AddExpenseCubit>().saveExpense(
           groupId: gid,
           groupCurrency: _groupCurrency,
@@ -869,7 +1028,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('New expense',
+              Text(_heading,
                   style: PayPactTypography.bodyMd.copyWith(
                       color: pt.ink, fontWeight: FontWeight.w700)),
               Text(subtitle,
@@ -1076,7 +1235,7 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                         : Icon(Icons.group_outlined,
                             size: 14, color: pt.ink2),
                     label: _group?.name ?? 'Loading…',
-                    onTap: null,
+                    onTap: _isEdit ? null : _pickGroup,
                   ),
                 ],
               ),
@@ -1129,9 +1288,10 @@ class _AddExpenseBodyState extends State<_AddExpenseBody> {
                           pt: pt,
                           leading: Icon(Icons.call_split_rounded,
                               size: 14, color: pt.ink2),
-                          label:
-                              'Equally · ${_group?.memberNames.length ?? 0} people',
-                          onTap: null,
+                          label: _splitType == 'equally'
+                              ? 'Equally · ${_group?.memberNames.length ?? 0} people'
+                              : _splitLabel(),
+                          onTap: _adjustSplit,
                         ),
                       ),
                       const SizedBox(width: 6),

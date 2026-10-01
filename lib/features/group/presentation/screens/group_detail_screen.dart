@@ -18,6 +18,8 @@ import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/group/presentation/cubit/group_detail_cubit.dart';
+import 'package:paypact/features/group/presentation/widgets/group_tab_views.dart';
+import 'package:paypact/features/group/presentation/widgets/invite_sheet.dart';
 import 'package:paypact/features/settle/domain/debt_simplifier.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
@@ -131,7 +133,7 @@ class _GroupDetailBody extends StatelessWidget {
                         'toUserId': toId,
                         'toUserName': toName,
                         'suggestedAmount': absAmount,
-                        'currency': group.currency as String? ?? '₹',
+                        'currency': (group.currency as String?) ?? kDefaultCurrency,
                         'groupName': group.name as String? ?? '',
                       },
                     );
@@ -292,7 +294,7 @@ class _GroupDetailBody extends StatelessWidget {
                             const SizedBox(height: 6),
                             Text(
                               '${expenses.length} expenses · '
-                              '₹${_totalAmount(expenses).toStringAsFixed(0)} tracked',
+                              '${currencySymbol(group.currency)}${_totalAmount(expenses).toStringAsFixed(0)} tracked',
                               style: PayPactTypography.bodyLg
                                   .copyWith(color: pt.ink2),
                             ),
@@ -335,7 +337,8 @@ class _GroupDetailBody extends StatelessWidget {
                                         Text(
                                           PpAmount.format(
                                               netBalance.round(),
-                                              signed: true),
+                                              signed: true,
+                                              currency: group.currency),
                                           style: PayPactTypography
                                               .amountXl
                                               .copyWith(
@@ -427,79 +430,17 @@ class _GroupDetailBody extends StatelessWidget {
                             : 'You',
                       ),
                     ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: PayPactSpacing.s6),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border(
-                                bottom:
-                                    BorderSide(color: pt.border)),
-                          ),
-                          child: Row(
-                            children: [
-                              _Tab(label: 'Expenses', active: true),
-                            ],
-                          ),
-                        ),
-                      ),
+                    _MobileTabbedSection(
+                      loaded: loaded,
+                      groupId: groupId,
+                      userId: (context.read<AuthCubit>().state
+                              is AuthAuthenticated)
+                          ? (context.read<AuthCubit>().state
+                                  as AuthAuthenticated)
+                              .user
+                              .id
+                          : '',
                     ),
-                    if (expenses.isEmpty)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(40),
-                          child: Center(
-                            child: Column(
-                              children: [
-                                Icon(Icons.receipt_long_outlined,
-                                    size: 40, color: pt.ink3),
-                                const SizedBox(height: 10),
-                                Text('No expenses yet',
-                                    style: PayPactTypography.bodyMd
-                                        .copyWith(color: pt.ink3)),
-                                const SizedBox(height: 4),
-                                Text('Tap + to add the first one',
-                                    style: PayPactTypography.bodySm
-                                        .copyWith(color: pt.ink3)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      )
-                    else
-                      SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, i) {
-                            final e = expenses[i];
-                            final authState =
-                                context.read<AuthCubit>().state;
-                            final userId = authState
-                                    is AuthAuthenticated
-                                ? authState.user.id
-                                : '';
-                            final myShare =
-                                e.splitAmountFor(userId);
-                            final sharePos = e.paidById == userId;
-                            final shareAmt = sharePos
-                                ? e.amount - myShare
-                                : -myShare;
-
-                            return GestureDetector(
-                              onTap: () => context.push(
-                                '/expense/${e.id}',
-                                extra: {'groupId': groupId},
-                              ),
-                              child: _ExpenseRow(
-                                expense: e,
-                                shareAmount: shareAmt,
-                                sharePositive: sharePos,
-                              ),
-                            );
-                          },
-                          childCount: expenses.length,
-                        ),
-                      ),
                     const SliverToBoxAdapter(
                         child: SizedBox(height: 120)),
                   ],
@@ -514,6 +455,132 @@ class _GroupDetailBody extends StatelessWidget {
 
   double _totalAmount(List<ExpenseEntity> expenses) =>
       expenses.fold(0, (sum, e) => sum + e.amount);
+}
+
+/// Tab bar + the selected tab's content, as slivers for the mobile scroll view.
+class _MobileTabbedSection extends StatefulWidget {
+  const _MobileTabbedSection({
+    required this.loaded,
+    required this.groupId,
+    required this.userId,
+  });
+  final GroupDetailLoaded loaded;
+  final String groupId;
+  final String userId;
+
+  @override
+  State<_MobileTabbedSection> createState() => _MobileTabbedSectionState();
+}
+
+class _MobileTabbedSectionState extends State<_MobileTabbedSection> {
+  static const _tabs = [
+    ('expenses', 'Expenses'),
+    ('balances', 'Balances'),
+    ('activity', 'Activity'),
+    ('members', 'Members'),
+  ];
+  String _active = 'expenses';
+
+  @override
+  Widget build(BuildContext context) {
+    final pt = context.pt;
+    final loaded = widget.loaded;
+    final expenses = loaded.expenses;
+    final currency = loaded.group.currency;
+
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: PayPactSpacing.s6),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: pt.border)),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final t in _tabs)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 24),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _active = t.$1),
+                          child: _Tab(label: t.$2, active: _active == t.$1),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_active == 'expenses')
+          if (expenses.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(40),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.receipt_long_outlined,
+                          size: 40, color: pt.ink3),
+                      const SizedBox(height: 10),
+                      Text('No expenses yet',
+                          style: PayPactTypography.bodyMd
+                              .copyWith(color: pt.ink3)),
+                      const SizedBox(height: 4),
+                      Text('Tap + to add the first one',
+                          style: PayPactTypography.bodySm
+                              .copyWith(color: pt.ink3)),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) {
+                  final e = expenses[i];
+                  final myShare = e.splitAmountFor(widget.userId);
+                  final sharePos = e.paidById == widget.userId;
+                  final shareAmt = sharePos ? e.amount - myShare : -myShare;
+                  return GestureDetector(
+                    onTap: () => context.push(
+                      '/expense/${e.id}',
+                      extra: {'groupId': widget.groupId},
+                    ),
+                    child: _ExpenseRow(
+                      expense: e,
+                      currency: currency,
+                      shareAmount: shareAmt,
+                      sharePositive: sharePos,
+                    ),
+                  );
+                },
+                childCount: expenses.length,
+              ),
+            )
+        else
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  PayPactSpacing.s6, 20, PayPactSpacing.s6, 0),
+              child: switch (_active) {
+                'balances' => GroupBalancesView(
+                    loaded: loaded, currentUserId: widget.userId),
+                'activity' => GroupActivityView(loaded: loaded),
+                _ => GroupMembersView(
+                    loaded: loaded, currentUserId: widget.userId),
+              },
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _Tab extends StatelessWidget {
@@ -543,10 +610,12 @@ class _Tab extends StatelessWidget {
 class _ExpenseRow extends StatelessWidget {
   const _ExpenseRow({
     required this.expense,
+    required this.currency,
     required this.shareAmount,
     required this.sharePositive,
   });
   final ExpenseEntity expense;
+  final String currency;
   final double shareAmount;
   final bool sharePositive;
 
@@ -555,6 +624,7 @@ class _ExpenseRow extends StatelessWidget {
     final pt = context.pt;
     final cat = _catFromString(expense.category);
     final dateStr = _formatDate(expense.createdAt);
+    final sym = currencySymbol(currency);
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -597,15 +667,15 @@ class _ExpenseRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '₹${expense.amount.toStringAsFixed(0)}',
+                    '$sym${expense.amount.toStringAsFixed(0)}',
                     style: PayPactTypography.amountLg
                         .copyWith(color: pt.ink, fontSize: 17),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     sharePositive
-                        ? '+₹${shareAmount.abs().toStringAsFixed(0)}'
-                        : '−₹${shareAmount.abs().toStringAsFixed(0)}',
+                        ? '+$sym${shareAmount.abs().toStringAsFixed(0)}'
+                        : '−$sym${shareAmount.abs().toStringAsFixed(0)}',
                     style: PayPactTypography.bodySm.copyWith(
                       color:
                           sharePositive ? pt.positive : pt.negative,
@@ -1094,11 +1164,8 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
                       Row(
                         children: [
                           PayPactButton(
-                            onPressed: () =>
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content:
-                                            Text('Share — coming soon'))),
+                            onPressed: () => showInviteSheet(context,
+                                group: loaded.group, currentUserId: _uid),
                             label: 'Share',
                             variant: PayPactButtonVariant.secondary,
                             leftIcon: Icons.ios_share_rounded,
@@ -1167,8 +1234,12 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
         return _expensesView(context, pt, sym);
       case 'settle':
         return _settlePlanView(context, pt, sym);
+      case 'balances':
+        return GroupBalancesView(loaded: loaded, currentUserId: _uid);
+      case 'activity':
+        return GroupActivityView(loaded: loaded);
       default:
-        return _placeholder(context, pt);
+        return GroupMembersView(loaded: loaded, currentUserId: _uid);
     }
   }
 
@@ -1312,21 +1383,6 @@ class _WebGroupDetailBodyState extends State<_WebGroupDetailBody> {
             ),
           ),
       ],
-    );
-  }
-
-  Widget _placeholder(BuildContext context, PayPactThemeExtension pt) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 80),
-      alignment: Alignment.center,
-      child: Column(
-        children: [
-          Icon(Icons.construction_rounded, size: 36, color: pt.ink3),
-          const SizedBox(height: 10),
-          Text('This view is coming soon',
-              style: PayPactTypography.bodyMd.copyWith(color: pt.ink3)),
-        ],
-      ),
     );
   }
 

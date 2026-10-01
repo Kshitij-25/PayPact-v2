@@ -10,6 +10,7 @@ import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/auth/presentation/screens/auth_brand_panel.dart';
+import 'package:paypact/features/auth/presentation/screens/forgot_password_dialog.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -76,9 +77,17 @@ class _SignInScreenState extends State<SignInScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             _Label(text: 'PASSWORD'),
-            Text('Forgot?',
-                style: PayPactTypography.bodySm
-                    .copyWith(color: pt.accent, fontWeight: FontWeight.w600)),
+            GestureDetector(
+              onTap: () => showForgotPasswordDialog(context,
+                  initialEmail: _emailCtrl.text.trim()),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text('Forgot?',
+                    style: PayPactTypography.bodySm.copyWith(
+                        color: pt.accent, fontWeight: FontWeight.w600)),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -221,9 +230,9 @@ class _SignInScreenState extends State<SignInScreen> {
 
     return BlocConsumer<AuthCubit, AuthState>(
       listener: (context, state) {
-        if (state is AuthAuthenticated) {
-          context.go(AppRoutes.home);
-        } else if (state is AuthError) {
+        // On success the router's auth guard moves us on (to home, or to an
+        // invite link the user arrived with), so there's nothing to do here.
+        if (state is AuthError) {
           ScaffoldMessenger.of(context)
               .showSnackBar(SnackBar(content: Text(state.message)));
         }
@@ -339,10 +348,21 @@ class _SignInScreenState extends State<SignInScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 _Label(text: 'PASSWORD'),
-                                Text('Forgot?',
-                                    style: PayPactTypography.bodySm.copyWith(
-                                        color: pt.accent,
-                                        fontWeight: FontWeight.w600)),
+                                GestureDetector(
+                                  onTap: () => showForgotPasswordDialog(
+                                      context,
+                                      initialEmail: _emailCtrl.text.trim()),
+                                  behavior: HitTestBehavior.opaque,
+                                  child: Padding(
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 4),
+                                    child: Text('Forgot?',
+                                        style: PayPactTypography.bodySm
+                                            .copyWith(
+                                                color: pt.accent,
+                                                fontWeight: FontWeight.w600)),
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),

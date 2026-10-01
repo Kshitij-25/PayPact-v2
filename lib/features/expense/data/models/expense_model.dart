@@ -51,6 +51,27 @@ class ExpenseModel extends ExpenseEntity {
     );
   }
 
+  /// Fields that change when an expense is edited. Deliberately omits
+  /// `createdAt` and `createdById` so the original entry date/author survive.
+  Map<String, dynamic> toUpdateMap() => {
+        'title': title,
+        'amount': amount,
+        'originalAmount': originalAmount,
+        'originalCurrency': originalCurrency,
+        'exchangeRate': exchangeRate,
+        'category': category,
+        'paidById': paidById,
+        'paidByName': paidByName,
+        'splits': splits
+            .map((s) => {
+                  'userId': s.userId,
+                  'userName': s.userName,
+                  'amount': s.amount,
+                })
+            .toList(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
   Map<String, dynamic> toMap() => {
         'title': title,
         'amount': amount,

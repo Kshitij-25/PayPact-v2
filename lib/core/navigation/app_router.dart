@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:go_router/go_router.dart';
+import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/navigation/auth_redirect.dart';
+import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
+import 'package:paypact/features/group/presentation/screens/join_group_screen.dart';
 import 'package:paypact/design_system/tokens/motion.dart';
 import 'package:paypact/features/activity/activity_screen.dart';
 import 'package:paypact/features/auth/presentation/screens/create_account_screen.dart';
@@ -39,6 +44,8 @@ class AppRoutes {
   static const settleUp = '/group/:groupId/settle';
   static const signUp = '/sign-up';
   static const addMembers = '/group/add-members';
+  static const join = '/join/:code';
+  static const invite = '/invite/:code';
 }
 
 // ── Transition helpers ────────────────────────────────────────────────────────
@@ -104,6 +111,11 @@ CustomTransitionPage<void> _slideUpModal({
 
 final appRouter = GoRouter(
   initialLocation: AppRoutes.splash,
+  refreshListenable: AuthRefreshListenable(locator<AuthCubit>().stream),
+  redirect: (context, state) =>
+      authRedirect(locator<AuthCubit>().state, state.uri),
+  onException: (context, state, router) =>
+      router.go(routeForUnmatched(state.uri)),
   routes: [
     GoRoute(
       path: AppRoutes.splash,
@@ -135,6 +147,16 @@ final appRouter = GoRouter(
         child: const CreateAccountScreen(),
       ),
     ),
+    // Invite links: https://<host>/invite/CODE (app links / web redirect),
+    // https://<host>/join/CODE (web app) and paypact://invite/CODE.
+    for (final path in const [AppRoutes.join, AppRoutes.invite])
+      GoRoute(
+        path: path,
+        pageBuilder: (context, state) => _fade(
+          key: state.pageKey,
+          child: JoinGroupScreen(code: state.pathParameters['code'] ?? ''),
+        ),
+      ),
     GoRoute(
       path: AppRoutes.addMembers,
       pageBuilder: (context, state) {
@@ -245,6 +267,7 @@ final appRouter = GoRouter(
                 key: state.pageKey,
                 child: AddExpenseScreen(
                   groupId: state.pathParameters['groupId'],
+                  expenseId: state.pathParameters['expenseId'],
                 ),
                 forward: const Duration(milliseconds: 250),
                 reverse: const Duration(milliseconds: 200),
@@ -266,7 +289,7 @@ final appRouter = GoRouter(
                     toUserName: extra?['toUserName'] as String? ?? '',
                     suggestedAmount:
                         (extra?['suggestedAmount'] as num?)?.toDouble() ?? 0,
-                    currency: extra?['currency'] as String? ?? '₹',
+                    currency: extra?['currency'] as String? ?? kDefaultCurrency,
                   ),
                 );
               },
@@ -305,7 +328,7 @@ final appRouter = GoRouter(
                     amount:
                         (extra?['amount'] as num?)?.toDouble() ?? 0,
                     receiptId: extra?['receiptId'] as String? ?? '',
-                    currency: extra?['currency'] as String? ?? '₹',
+                    currency: extra?['currency'] as String? ?? kDefaultCurrency,
                   ),
                 );
               },
@@ -339,7 +362,4 @@ final appRouter = GoRouter(
       ],
     ),
   ],
-  errorBuilder: (_, state) => Scaffold(
-    body: Center(child: Text('Page not found: ${state.error}')),
-  ),
 );

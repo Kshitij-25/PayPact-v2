@@ -18,6 +18,21 @@ abstract class ExpenseRepository {
     required List<ExpenseSplitEntity> splits,
     required String createdById,
   });
+  /// Overwrites the editable fields of an existing expense. The original
+  /// `createdAt` / `createdById` are preserved.
+  Future<void> updateExpense({
+    required String groupId,
+    required String expenseId,
+    required String title,
+    required double amount,
+    required double originalAmount,
+    required String originalCurrency,
+    required double exchangeRate,
+    required String category,
+    required String paidById,
+    required String paidByName,
+    required List<ExpenseSplitEntity> splits,
+  });
   Future<void> deleteExpense(String groupId, String expenseId);
   /// Records a settle-up payment. Idempotent: re-invoking with the same
   /// [idempotencyKey] returns the already-recorded settlement instead of

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:paypact/core/utils/invite_code.dart';
 import 'package:paypact/features/group/data/models/group_model.dart';
 import 'package:paypact/features/group/domain/entities/group_entity.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
@@ -53,6 +54,8 @@ class FirestoreGroupRepository implements GroupRepository {
       memberIds: [createdByUid],
       memberNames: {createdByUid: createdByName},
       createdBy: createdByUid,
+      adminIds: [createdByUid],
+      inviteCode: generateInviteCode(),
       createdAt: DateTime.now(),
     );
     final ref = await _firestore.collection('groups').add(model.toMap());
@@ -71,14 +74,53 @@ class FirestoreGroupRepository implements GroupRepository {
 
   @override
   Future<void> removeMember(String groupId, String userId) async {
-    final snap = await _firestore.collection('groups').doc(groupId).get();
-    final data = snap.data() ?? {};
+    final ref = _firestore.collection('groups').doc(groupId);
+    final data = (await ref.get()).data() ?? {};
     final names = Map<String, dynamic>.from((data['memberNames'] as Map?) ?? {});
     names.remove(userId);
-    await _firestore.collection('groups').doc(groupId).update({
+    // Write the whole list (never arrayRemove): on a group that predates
+    // `adminIds` that would create an empty list and silently demote the creator.
+    final admins = _adminsOf(data)..remove(userId);
+    await ref.update({
       'memberIds': FieldValue.arrayRemove([userId]),
       'memberNames': names,
+      'adminIds': admins,
     });
+  }
+
+  @override
+  Future<void> setAdmin(String groupId, String userId,
+      {required bool isAdmin}) async {
+    final ref = _firestore.collection('groups').doc(groupId);
+    final data = (await ref.get()).data() ?? {};
+    final admins = _adminsOf(data);
+    if (isAdmin) {
+      if (!admins.contains(userId)) admins.add(userId);
+    } else {
+      admins.remove(userId);
+    }
+    await ref.update({'adminIds': admins});
+  }
+
+  List<String> _adminsOf(Map<String, dynamic> data) => data['adminIds'] is List
+      ? List<String>.from(data['adminIds'] as List)
+      : <String>[if (data['createdBy'] is String) data['createdBy'] as String];
+
+  @override
+  Future<String> ensureInviteCode(String groupId) async {
+    final ref = _firestore.collection('groups').doc(groupId);
+    final existing = (await ref.get()).data()?['inviteCode'] as String?;
+    if (existing != null && existing.isNotEmpty) return existing;
+    return resetInviteCode(groupId);
+  }
+
+  @override
+  Future<String> resetInviteCode(String groupId) async {
+    final code = generateInviteCode();
+    await _firestore.collection('groups').doc(groupId).update({
+      'inviteCode': code,
+    });
+    return code;
   }
 
   @override

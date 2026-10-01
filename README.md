@@ -1,47 +1,99 @@
-# PayPact — Flutter port of the v2 redesign
+# PayPact
 
-This folder mirrors your `lib/` structure. Drop these files in directly — they import the existing
-design-system tokens (`PayPactColors`, `PayPactTypography`, `PayPactRadius`, `PayPactSpacing`,
-`PayPactShadows`), the `PayPactThemeExtension` (via `context.pt`), and the existing components
-(`PayPactButton`, `PayPactCard`, `PayPactBadge`, `PayPactBottomNav`).
+Shared expenses with smart debt simplification. Flutter app (iOS, Android, web)
+on Firebase: Auth, Firestore, Cloud Functions, Cloud Messaging and Hosting.
 
-All screens are **stateless / mock-data** — they render the visual design only. Wiring them up to
-your BLoCs (`AuthBloc`, `GroupBloc`, `ExpenseBloc`, `NotificationBloc`, `SettingsBloc`) is the next
-step.
+## What's in the app
 
-## Map
+- **Groups & expenses** — create groups, add expenses (equal / exact / percent /
+  shares splits, multi-currency with a snapshot exchange rate), edit and delete.
+- **Settle up** — the fewest payments that square everyone up, recorded as an
+  immutable ledger entry with a receipt.
+- **Invites** — every group has a secret invite code behind a shareable link and
+  QR (`https://paypact-fec8e.web.app/invite/CODE`, `paypact://invite/CODE`).
+  Joining goes through a Cloud Function, so non-members never touch group data.
+- **Roles** — admins edit/delete the group and manage members and roles. You
+  can't remove someone, or leave, while you have an unsettled balance; the last
+  admin can't leave a group that still has other members.
+- **Notifications** — in-app inbox plus push. Settings (settlements, expenses,
+  smart nudges, weekly digest) and per-group mute are stored on the account and
+  honoured by whoever is notifying you.
+- **Insights, activity, home dashboard** — totals across groups are converted to
+  your default currency (Settings → Currency).
 
-| HTML mock              | Flutter file                                                       |
-|------------------------|--------------------------------------------------------------------|
-| Splash                 | `features/splash/splash_screen_v2.dart`                            |
-| Onboarding · 01/02/03  | `features/onboarding/onboarding_screen.dart` (PageView, 3 pages)   |
-| Sign in                | `features/auth/presentation/screens/sign_in_screen.dart`           |
-| Home                   | `features/home/presentation/screens/home_screen_v2.dart`           |
-| Groups                 | `features/group/presentation/screens/groups_screen_v2.dart`        |
-| Create Group           | `features/group/presentation/screens/create_group_screen.dart`     |
-| Group detail           | `features/group/presentation/screens/group_detail_screen_v2.dart`  |
-| Add expense            | `features/expense/presentation/screens/add_expense_screen_v2.dart` |
-| Expense detail         | `features/expense/presentation/screens/expense_detail_screen.dart` |
-| Settle up              | `features/settle/settle_up_screen.dart`                            |
-| Settled (success)      | `features/settle/settle_success_screen.dart`                       |
-| Activity               | `features/activity/activity_screen.dart`                           |
-| Notifications          | `features/notification/presentation/screens/notifications_screen_v2.dart` |
-| Profile                | `features/profile/presentation/screens/profile_screen_v2.dart`     |
-| Settings               | `features/profile/presentation/screens/settings_screen.dart`       |
+## Layout
 
-Shared building blocks live in `widgets/pp_atoms.dart` — `PpAvatar`, `PpAvatarStack`,
-`PpGlassCard`, `PpGlassIconButton`, `PpStatusBarSpacer`, `PpCategoryDisc`, `PpSectionLabel`,
-`PpChip`, `PpBackdropGlow`, `PpAmount`.
+```
+lib/
+  core/            DI (get_it), router + auth guard, services, utils
+  design_system/   tokens, theme, shared components
+  features/<name>/ domain (entities, repositories) · data (Firestore) · presentation (cubits, screens)
+  widgets/         shared atoms (avatars, amounts, chips)
+functions/         Cloud Functions (push delivery, invites, weekly digest) + tests
+rules_test/        Firestore security-rules tests (run against the emulator)
+firestore.rules    security rules
+web/invite/        static landing page for invite links
+```
 
-## Notes
+State management is `flutter_bloc` (cubits); repositories are interfaces with
+Firestore implementations registered in `lib/core/di/injection_container.dart`.
 
-- **Font:** typography uses your existing `PayPactTypography` (Geist + Geist Mono). The HTML mocks
-  used Plus Jakarta — the Flutter feel is similar but slightly more grotesk.
-- **FAB & bottom nav:** I use your `PayPactBottomNav` for the main tabs (Home/Groups/Activity/You)
-  and your `PayPactButton` for CTAs. The FAB tap routes you to `AddExpenseScreen`.
-- **Glass / layering:** done with `BackdropFilter` + translucent fills. Most surfaces are still
-  opaque paper to keep readability — only nav, sheet handles, and a few floating chips are glassy.
-- **Imagery placeholders:** anywhere the HTML used an emoji as a cover or category, I kept the
-  emoji as `Text` so it's swappable later for icons or photos.
-- **Data:** all screen content is hard-coded mock data. Look for `_mock*` lists at the top of
-  each file — replace with bloc state when you wire up.
+## Run it
+
+```bash
+flutter pub get
+flutter run                      # pick a device
+```
+
+Firebase is already configured in `lib/firebase_options.dart`.
+
+> The iOS build uses CocoaPods (`enable-swift-package-manager: false` in
+> `pubspec.yaml`) because Swift Package Manager breaks on project paths that
+> contain a space. Once the project lives in a path without spaces you can
+> remove that setting.
+
+## Tests
+
+```bash
+flutter test                         # Dart unit tests
+cd functions && npm install && npm test        # Cloud Functions logic
+cd rules_test && npm install && npm test       # security rules, needs Java + firebase-tools
+```
+
+## Deploy
+
+Order matters: rules and functions go out together because the app now depends
+on both (invites call a function; push tokens live under `users/{uid}/private`).
+
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
+firebase deploy --only functions      # needs the Blaze plan
+flutter build web && firebase deploy --only hosting
+```
+
+Functions (`functions/index.js`):
+
+| Function | Trigger | What it does |
+|---|---|---|
+| `onNotificationCreated` | a doc is added to `users/{uid}/notifications` | sends the FCM push for it |
+| `getInvitePreview`, `joinGroupByCode` | callable | resolves an invite code; adds the caller to the group |
+| `onGroupDeleted` | a group doc is deleted | deletes its expenses and settlements |
+| `weeklyDigest` | Sundays 20:00 IST | writes a digest notification for users who opted in |
+
+### Existing data
+
+Groups created before roles/invites existed keep working: admin falls back to
+the creator, and an admin gets an invite code the first time they open the
+invite sheet. Push tokens used to live on the public profile; the app moves
+them to the private path on next launch and scrubs the old field.
+
+### Deep links — one-time setup
+
+- **Android App Links:** `web/.well-known/assetlinks.json` lists the app's
+  package; replace the SHA-256 with your release signing certificate
+  (`cd android && ./gradlew signingReport`).
+- **iOS universal links:** add the *Associated Domains* capability
+  (`applinks:paypact-fec8e.web.app`) to the Runner target in Xcode. The key in
+  `Info.plist` is ignored by iOS; it has to be in the entitlements. This needs a
+  paid Apple developer team. Until then `paypact://invite/CODE` and the web
+  page's "Open in the app" button still work.

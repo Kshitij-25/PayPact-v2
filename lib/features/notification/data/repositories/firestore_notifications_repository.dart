@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:paypact/features/notification/data/models/notification_model.dart';
 import 'package:paypact/features/notification/domain/entities/notification_entity.dart';
+import 'package:paypact/features/notification/domain/notification_prefs.dart';
 import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
 
 class FirestoreNotificationsRepository implements NotificationsRepository {
@@ -49,6 +50,14 @@ class FirestoreNotificationsRepository implements NotificationsRepository {
     required String actorId,
     required String actorName,
   }) async {
+    // Respect the recipient's preferences / muted groups. If their profile
+    // can't be read, deliver rather than silently drop the notification.
+    try {
+      final data =
+          (await _firestore.collection('users').doc(targetUserId).get()).data();
+      if (!shouldDeliver(type: type, groupId: groupId, userData: data)) return;
+    } catch (_) {}
+
     await _notifRef(targetUserId).add(NotificationModel(
       id: '',
       type: type,

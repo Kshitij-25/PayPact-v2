@@ -91,6 +91,12 @@ class FirebaseAuthRepository implements AuthRepository {
       photoUrl: null,
     );
     await _firestore.collection('users').doc(fbUser.uid).set(model.toMap());
+    // Best-effort: failing to send the email must not fail sign-up.
+    try {
+      await fbUser.sendEmailVerification();
+    } catch (e) {
+      debugPrint('sendEmailVerification failed: $e');
+    }
     return model;
   }
 
@@ -129,6 +135,28 @@ class FirebaseAuthRepository implements AuthRepository {
     }
     return model;
   }
+
+  @override
+  Future<void> sendEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('Not signed in');
+    await user.sendEmailVerification();
+  }
+
+  @override
+  bool get isEmailVerified => _auth.currentUser?.emailVerified ?? true;
+
+  @override
+  Future<bool> reloadEmailVerified() async {
+    final user = _auth.currentUser;
+    if (user == null) return true;
+    await user.reload();
+    return _auth.currentUser?.emailVerified ?? true;
+  }
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) =>
+      _auth.sendPasswordResetEmail(email: email);
 
   @override
   Future<void> signOut() async {

@@ -662,7 +662,8 @@ class _GroupListItem extends StatelessWidget {
               Text(
                 settled
                     ? '—'
-                    : PpAmount.format(g.netBalance.abs().round()),
+                    : PpAmount.format(g.netBalance.abs().round(),
+                        currency: g.currency),
                 style: PayPactTypography.amountLg.copyWith(
                     fontSize: 20,
                     color: settled

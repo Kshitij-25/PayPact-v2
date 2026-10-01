@@ -4,6 +4,8 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
+import 'package:paypact/core/utils/default_currency.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/spacing.dart';
@@ -512,28 +514,43 @@ class PpAmount extends StatelessWidget {
     this.tone = PpAmountTone.neutral,
     this.style,
     this.signed = false,
+    this.currency,
   });
 
   final num value;
   final PpAmountTone tone;
   final TextStyle? style;
   final bool signed;
+  final String? currency;
 
-  static String format(num n, {bool signed = false, bool absolute = false}) {
+  /// Formats [n] in [currency] (an ISO code; defaults to the user's chosen
+  /// default currency). INR uses lakh/crore grouping, everything else 1,000s.
+  static String format(num n,
+      {bool signed = false, bool absolute = false, String? currency}) {
+    final code = currency ?? userDefaultCurrency();
+    final sym = currencySymbol(code);
     final v = absolute ? n.abs() : n;
     final abs = v.abs().round();
-    final s = _withCommas(abs);
+    final s = _withCommas(abs, indian: code == 'INR');
     if (signed) {
-      if (v > 0) return '+₹$s';
-      if (v < 0) return '−₹$s';
-      return '₹$s';
+      if (v > 0) return '+$sym$s';
+      if (v < 0) return '−$sym$s';
+      return '$sym$s';
     }
-    return (v < 0 ? '−₹' : '₹') + s;
+    return (v < 0 ? '−$sym' : sym) + s;
   }
 
-  static String _withCommas(int n) {
+  static String _withCommas(int n, {bool indian = true}) {
     final s = n.toString();
     if (s.length <= 3) return s;
+    if (!indian) {
+      final b = StringBuffer();
+      for (var i = 0; i < s.length; i++) {
+        if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+        b.write(s[i]);
+      }
+      return b.toString();
+    }
     // Indian comma grouping: last 3, then groups of 2.
     final last3 = s.substring(s.length - 3);
     final rest = s.substring(0, s.length - 3);
@@ -558,7 +575,7 @@ class PpAmount extends StatelessWidget {
     }
     final base = style ?? PayPactTypography.amountLg;
     return Text(
-      format(value, signed: signed),
+      format(value, signed: signed, currency: currency),
       style: base.copyWith(color: color),
     );
   }

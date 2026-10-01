@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/navigation/app_router.dart';
+import 'package:paypact/core/navigation/auth_redirect.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
 import 'package:paypact/features/splash/cubit/splash_cubit.dart';
 
@@ -16,7 +17,8 @@ class SplashScreen extends StatelessWidget {
         listener: (context, state) {
           if (state is SplashDone) {
             if (state.isAuthenticated) {
-              context.go(AppRoutes.home);
+              // Resume a link that arrived while auth was still resolving.
+              context.go(PendingLink.take() ?? AppRoutes.home);
             } else {
               context.go(AppRoutes.onboarding);
             }

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/core/di/injection_container.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/core/utils/responsive.dart';
 import 'package:paypact/design_system/components/paypact_button.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
@@ -14,6 +15,7 @@ import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
 import 'package:paypact/features/expense/domain/entities/expense_entity.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/expense/presentation/cubit/expense_detail_cubit.dart';
+import 'package:paypact/features/group/domain/repositories/group_repository.dart';
 import 'package:paypact/features/notification/domain/repositories/notifications_repository.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 
@@ -34,6 +36,7 @@ class ExpenseDetailScreen extends StatelessWidget {
       create: (_) => ExpenseDetailCubit(
         locator<ExpenseRepository>(),
         locator<NotificationsRepository>(),
+        locator<GroupRepository>(),
         groupId,
         expenseId,
         userId,
@@ -77,6 +80,8 @@ class _ExpenseDetailBody extends StatelessWidget {
         final iPaid = expense.paidById == currentUserId;
         final myShare = expense.splitAmountFor(currentUserId);
         final myNet = iPaid ? expense.amount - myShare : -myShare;
+        final sym = currencySymbol(loaded.currency);
+        final evenSplit = _isEvenSplit(expense);
 
         return Scaffold(
           backgroundColor: pt.bg,
@@ -126,8 +131,13 @@ class _ExpenseDetailBody extends StatelessWidget {
                           const Spacer(),
                           PpGlassIconButton(
                             icon: Icons.edit_outlined,
-                            onTap: () => context.push(
-                                '/group/$groupId/expense/$expenseId/edit'),
+                            onTap: () async {
+                              final cubit =
+                                  context.read<ExpenseDetailCubit>();
+                              await context.push(
+                                  '/group/$groupId/expense/$expenseId/edit');
+                              if (!cubit.isClosed) cubit.load();
+                            },
                           ),
                           const SizedBox(width: 10),
                           PpGlassIconButton(
@@ -150,7 +160,7 @@ class _ExpenseDetailBody extends StatelessWidget {
                                     .copyWith(color: pt.ink)),
                             const SizedBox(height: 8),
                             Text(
-                              '₹${expense.amount.toStringAsFixed(expense.amount.truncateToDouble() == expense.amount ? 0 : 2)}',
+                              '$sym${expense.amount.toStringAsFixed(expense.amount.truncateToDouble() == expense.amount ? 0 : 2)}',
                               style: PayPactTypography.amountHero
                                   .copyWith(color: pt.ink, fontSize: context.sp(56)),
                             ),
@@ -162,13 +172,13 @@ class _ExpenseDetailBody extends StatelessWidget {
                                 children: [
                                   TextSpan(
                                     text: iPaid
-                                        ? 'You paid · split equally · '
+                                        ? 'You paid · ${evenSplit ? 'split equally' : 'split unevenly'} · '
                                         : '${expense.paidByName} paid · your share · ',
                                   ),
                                   TextSpan(
                                     text: myNet >= 0
-                                        ? '+₹${myNet.abs().toStringAsFixed(0)} to you'
-                                        : '−₹${myNet.abs().toStringAsFixed(0)} you owe',
+                                        ? '+$sym${myNet.abs().toStringAsFixed(0)} to you'
+                                        : '−$sym${myNet.abs().toStringAsFixed(0)} you owe',
                                     style: TextStyle(
                                       color: myNet >= 0
                                           ? pt.positive
@@ -206,6 +216,7 @@ class _ExpenseDetailBody extends StatelessWidget {
                                 split: expense.splits[i],
                                 paidById: expense.paidById,
                                 currentUserId: currentUserId,
+                                sym: sym,
                               ),
                             ],
                           ]),
@@ -293,16 +304,25 @@ class _ExpenseDetailBody extends StatelessWidget {
   }
 }
 
+/// Whether every share is (within rounding) the same.
+bool _isEvenSplit(ExpenseEntity e) {
+  if (e.splits.isEmpty) return true;
+  final first = e.splits.first.amount;
+  return e.splits.every((s) => (s.amount - first).abs() <= 0.011);
+}
+
 class _SplitTile extends StatelessWidget {
   const _SplitTile({
     required this.split,
     required this.paidById,
     required this.currentUserId,
+    required this.sym,
   });
 
   final ExpenseSplitEntity split;
   final String paidById;
   final String currentUserId;
+  final String sym;
 
   @override
   Widget build(BuildContext context) {
@@ -311,8 +331,8 @@ class _SplitTile extends StatelessWidget {
     final isCurrentUser = split.userId == currentUserId;
     final displayName = isCurrentUser ? 'You' : split.userName;
     final subLabel = isPayer
-        ? 'paid · ₹${split.amount.toStringAsFixed(0)}'
-        : 'owes · ₹${split.amount.toStringAsFixed(0)}';
+        ? 'paid · $sym${split.amount.toStringAsFixed(0)}'
+        : 'owes · $sym${split.amount.toStringAsFixed(0)}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -337,7 +357,7 @@ class _SplitTile extends StatelessWidget {
           const SizedBox(width: 8),
         ],
         Text(
-          '₹${split.amount.toStringAsFixed(0)}',
+          '$sym${split.amount.toStringAsFixed(0)}',
           style: PayPactTypography.amountLg.copyWith(
               color: pt.ink, fontSize: 15, fontWeight: FontWeight.w600),
         ),

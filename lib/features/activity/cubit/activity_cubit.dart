@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:intl/intl.dart';
 import 'package:paypact/features/expense/domain/repositories/expense_repository.dart';
 import 'package:paypact/features/group/domain/repositories/group_repository.dart';
@@ -31,7 +32,7 @@ class ActivityCubit extends Cubit<ActivityState> {
           final who = e.paidById == userId ? 'You' : e.paidByName;
           final myOwed = e.splitAmountFor(userId);
           final sub = (!isMe && myOwed > 0)
-              ? 'you owe ₹${myOwed.toStringAsFixed(0)}'
+              ? 'you owe ${currencySymbol(group.currency)}${myOwed.toStringAsFixed(0)}'
               : null;
           allItems.add(ActivityItem(
             id: e.id,
@@ -51,6 +52,7 @@ class ActivityCubit extends Cubit<ActivityState> {
             createdAt: e.createdAt,
             expenseId: e.id,
             groupId: e.groupId,
+            currency: group.currency,
           ));
         }
       }));

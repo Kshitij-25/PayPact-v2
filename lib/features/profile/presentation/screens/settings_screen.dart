@@ -3,12 +3,16 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:paypact/core/di/injection_container.dart';
 import 'package:paypact/core/theme/theme_cubit.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:paypact/core/utils/currency_utils.dart';
 import 'package:paypact/design_system/components/paypact_card.dart';
 import 'package:paypact/design_system/theme/paypact_theme_extension.dart';
 import 'package:paypact/design_system/tokens/radius.dart';
 import 'package:paypact/design_system/tokens/spacing.dart';
 import 'package:paypact/design_system/tokens/typography.dart';
+import 'package:paypact/features/auth/presentation/cubit/auth_cubit.dart';
+import 'package:paypact/features/notification/domain/notification_prefs.dart';
+import 'package:paypact/features/notification/domain/repositories/notification_prefs_repository.dart';
 import 'package:paypact/widgets/pp_atoms.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,14 +31,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'digest': 'notif_digest',
   };
 
-  Map<String, bool> _notifState = {
-    'settlements': true,
-    'nudges': true,
-    'expenses': true,
-    'digest': false,
-  };
+  Map<String, bool> _notifState = Map.of(kNotifDefaults);
 
   String _defaultCurrency = kDefaultCurrency;
+
+  String? get _userId {
+    final s = context.read<AuthCubit>().state;
+    return s is AuthAuthenticated ? s.user.id : null;
+  }
 
   @override
   void initState() {
@@ -44,23 +48,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadPrefs() async {
     final prefs = locator<SharedPreferences>();
-    setState(() {
-      _notifState = {
-        'settlements':
-            prefs.getBool(_prefsKeys['settlements']!) ?? true,
-        'nudges': prefs.getBool(_prefsKeys['nudges']!) ?? true,
-        'expenses': prefs.getBool(_prefsKeys['expenses']!) ?? true,
-        'digest': prefs.getBool(_prefsKeys['digest']!) ?? false,
-      };
-      _defaultCurrency =
-          prefs.getString(kPrefCurrencyKey) ?? kDefaultCurrency;
-    });
+    setState(() => _defaultCurrency =
+        prefs.getString(kPrefCurrencyKey) ?? kDefaultCurrency);
+
+    final uid = _userId;
+    if (uid == null) return;
+    // Preferences live on the account so the people who notify you (and the
+    // weekly-digest job) can honour them. Anything saved on this device by an
+    // older version is carried over the first time.
+    final legacy = <String, bool>{
+      for (final e in _prefsKeys.entries)
+        if (prefs.getBool(e.value) != null) e.key: prefs.getBool(e.value)!,
+    };
+    try {
+      final remote = await locator<NotificationPrefsRepository>()
+          .loadPrefs(uid, legacy: legacy.isEmpty ? null : legacy);
+      if (mounted) setState(() => _notifState = remote);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Couldn't load your notification settings.")));
+      }
+    }
   }
 
   Future<void> _setNotif(String key, bool value) async {
-    final prefs = locator<SharedPreferences>();
-    await prefs.setBool(_prefsKeys[key]!, value);
+    final uid = _userId;
+    if (uid == null) return;
+    final previous = _notifState[key];
     setState(() => _notifState[key] = value);
+    try {
+      await locator<NotificationPrefsRepository>().setPref(uid, key, value);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _notifState[key] = previous ?? kNotifDefaults[key]!);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Couldn't save that setting. Try again.")));
+    }
   }
 
   Future<void> _setCurrency(String code) async {
@@ -301,9 +325,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 24),
                       Center(
-                        child: Text('PAYPACT · v2.0.1 (build 248)',
-                            style: PayPactTypography.label.copyWith(
-                                color: pt.ink3, letterSpacing: 1.5)),
+                        child: FutureBuilder<PackageInfo>(
+                          future: PackageInfo.fromPlatform(),
+                          builder: (context, snap) {
+                            final info = snap.data;
+                            return Text(
+                                info == null
+                                    ? 'PAYPACT'
+                                    : 'PAYPACT · v${info.version} (build ${info.buildNumber})',
+                                style: PayPactTypography.label.copyWith(
+                                    color: pt.ink3, letterSpacing: 1.5));
+                          },
+                        ),
                       ),
                     ],
                   ),

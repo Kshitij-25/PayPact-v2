@@ -36,23 +36,10 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
     }
     emit(AddExpenseLoading());
     try {
-      double exchangeRate = 1.0;
-      double baseAmount = amount;
-
-      if (originalCurrency != groupCurrency) {
-        exchangeRate =
-            await _rateService.getRate(originalCurrency, groupCurrency);
-        baseAmount = amount * exchangeRate;
-      }
-
-      final baseSplits = splits
-          .map((s) => ExpenseSplitEntity(
-                userId: s.userId,
-                userName: s.userName,
-                amount:
-                    double.parse((s.amount * exchangeRate).toStringAsFixed(2)),
-              ))
-          .toList();
+      final exchangeRate =
+          await _resolveRate(originalCurrency, groupCurrency, null);
+      final baseAmount = amount * exchangeRate;
+      final baseSplits = _toBaseSplits(splits, exchangeRate);
 
       await _repo.createExpense(
         groupId: groupId,
@@ -85,4 +72,91 @@ class AddExpenseCubit extends Cubit<AddExpenseState> {
       emit(AddExpenseError(e.toString()));
     }
   }
+
+  /// Saves edits to [existing]. If the currency is unchanged the originally
+  /// recorded exchange rate is kept, so editing a title doesn't silently
+  /// revalue a historical foreign-currency expense.
+  Future<void> updateExpense({
+    required ExpenseEntity existing,
+    required String groupCurrency,
+    required String groupName,
+    required String title,
+    required double amount,
+    required String originalCurrency,
+    required String category,
+    required String paidById,
+    required String paidByName,
+    required List<ExpenseSplitEntity> splits,
+    required String currentUserId,
+    required String currentUserName,
+  }) async {
+    if (title.trim().isEmpty) {
+      emit(AddExpenseError('Please enter a description'));
+      return;
+    }
+    if (amount <= 0) {
+      emit(AddExpenseError('Amount must be greater than zero'));
+      return;
+    }
+    emit(AddExpenseLoading());
+    try {
+      final exchangeRate =
+          await _resolveRate(originalCurrency, groupCurrency, existing);
+      final baseAmount = amount * exchangeRate;
+      final baseSplits = _toBaseSplits(splits, exchangeRate);
+
+      await _repo.updateExpense(
+        groupId: existing.groupId,
+        expenseId: existing.id,
+        title: title.trim(),
+        amount: baseAmount,
+        originalAmount: amount,
+        originalCurrency: originalCurrency,
+        exchangeRate: exchangeRate,
+        category: category,
+        paidById: paidById,
+        paidByName: paidByName,
+        splits: baseSplits,
+      );
+
+      // Notify everyone involved before or after the edit, except the editor.
+      final affected = <String>{
+        ...existing.splits.map((s) => s.userId),
+        ...splits.map((s) => s.userId),
+      }..remove(currentUserId);
+      await Future.wait(affected.map((id) => _notifRepo.push(
+            targetUserId: id,
+            type: 'expense_updated',
+            title: '$currentUserName edited an expense',
+            body: '"${title.trim()}" in $groupName was updated.',
+            groupId: existing.groupId,
+            groupName: groupName,
+            actorId: currentUserId,
+            actorName: currentUserName,
+          )));
+
+      emit(AddExpenseSuccess());
+    } catch (e) {
+      emit(AddExpenseError(e.toString()));
+    }
+  }
+
+  Future<double> _resolveRate(
+      String from, String to, ExpenseEntity? existing) async {
+    if (from == to) return 1.0;
+    if (existing != null && existing.originalCurrency == from) {
+      return existing.exchangeRate;
+    }
+    return _rateService.getRate(from, to);
+  }
+
+  List<ExpenseSplitEntity> _toBaseSplits(
+          List<ExpenseSplitEntity> splits, double rate) =>
+      splits
+          .map((s) => ExpenseSplitEntity(
+                userId: s.userId,
+                userName: s.userName,
+                amount: double.parse((s.amount * rate).toStringAsFixed(2)),
+              ))
+          .toList();
 }

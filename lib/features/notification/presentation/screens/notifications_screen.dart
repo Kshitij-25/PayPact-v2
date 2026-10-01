@@ -222,10 +222,13 @@ class _NotifTile extends StatelessWidget {
 
   IconData get _icon => switch (notif.type) {
         'expense_added' => Icons.receipt_long_outlined,
+        'expense_updated' => Icons.edit_note_rounded,
         'expense_deleted' => Icons.delete_outline_rounded,
         'member_added' => Icons.group_add_outlined,
         'member_removed' => Icons.person_remove_outlined,
         'settlement' => Icons.handshake_outlined,
+        'nudge' => Icons.notifications_active_outlined,
+        'digest' => Icons.insights_rounded,
         'group_updated' => Icons.edit_outlined,
         'group_deleted' => Icons.delete_forever_outlined,
         _ => Icons.notifications_none_rounded,
