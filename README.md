@@ -166,6 +166,38 @@ firebase deploy --only firestore:rules,firestore:indexes
 flutter build web && firebase deploy --only hosting
 ```
 
+### Release build (Google Play)
+
+```bash
+flutter build appbundle --release   # → build/app/outputs/bundle/release/app-release.aab
+```
+
+Release builds are signed with the **upload key** described in `android/key.properties`
+(gitignored — never commit it or the keystore). Without that file the build falls back to
+the debug key, which Play rejects.
+
+`key.properties` format, pointing at your keystore:
+
+```properties
+storePassword=…
+keyPassword=…
+keyAlias=upload
+storeFile=/absolute/path/to/paypact-upload-keystore.jks
+```
+
+To create a new keystore (once — keep it and its passwords backed up somewhere safe, e.g. a
+password manager):
+
+```bash
+keytool -genkeypair -v -storetype PKCS12 -keystore ~/.paypact-keys/paypact-upload-keystore.jks \
+  -alias upload -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Enrol in **Play App Signing** when you create the app in the Play Console: Google holds the
+real app-signing key, and this upload key only proves uploads come from you (it can be reset
+through Play support if lost). Raise `version:` in `pubspec.yaml` (the number after `+`) for
+every upload. Store listing copy and assets are in [`store/play-store/`](store/play-store).
+
 ### One-time Firebase setup
 
 - **App Check**: register your app (Play Integrity / App Attest; reCAPTCHA v3 for web, passed as
