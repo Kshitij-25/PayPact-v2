@@ -1,8 +1,34 @@
+<p align="center">
+  <img src="store/play-store/logo/paypact-icon-512.png" alt="PayPact" width="96">
+</p>
+
 # PayPact
 
 Shared expenses with smart debt simplification. Flutter app (iOS, Android, web)
 on Firebase's **free Spark plan**: Auth, Firestore and Hosting only — no Cloud
 Functions, Cloud Storage or Cloud Messaging (see [Running on the free plan](#running-on-the-free-plan)).
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="store/play-store/screenshots/01-home.png" alt="Home" width="200"></td>
+    <td><img src="store/play-store/screenshots/02-groups.png" alt="Group detail" width="200"></td>
+    <td><img src="store/play-store/screenshots/03-add-expense.png" alt="Add an expense" width="200"></td>
+    <td><img src="store/play-store/screenshots/04-settle-up.png" alt="Settle up" width="200"></td>
+  </tr>
+  <tr>
+    <td><img src="store/play-store/screenshots/05-pay-qr.png" alt="UPI payment QR" width="200"></td>
+    <td><img src="store/play-store/screenshots/06-activity.png" alt="Activity timeline" width="200"></td>
+    <td><img src="store/play-store/screenshots/07-insights.png" alt="Insights" width="200"></td>
+    <td><img src="store/play-store/screenshots/08-welcome.png" alt="Onboarding" width="200"></td>
+  </tr>
+</table>
+
+Captured on an iPhone 17 Pro Max simulator against the local Firebase emulators
+with sample data (see [Trying signed-in flows without touching production](#trying-signed-in-flows-without-touching-production)).
+Play Store assets (icon, feature graphic, framed screenshots) live in
+[`store/play-store/`](store/play-store).
 
 ## What's in the app
 
