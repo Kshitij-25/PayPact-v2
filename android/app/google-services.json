@@ -14,41 +14,21 @@
       },
       "oauth_client": [
         {
-          "client_id": "531387933797-gi2neo7h2rtasuk16d2r1rq2m8g8ad85.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
+          "client_id": "531387933797-7v037m9cehabimv23sk4f8ks8uddpspn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kshitijcodecraft.paypact",
+            "certificate_hash": "6df10e8e9189be0b5f6ce779c02c8595c6280221"
+          }
+        },
         {
-          "current_key": "AIzaSyAjwfmOcYqJeu6gTNDA5COJkfqgXFawIGc"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "531387933797-gi2neo7h2rtasuk16d2r1rq2m8g8ad85.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "531387933797-6r3upag01ihg89jokos6601s5mlkcg6u.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.kshitijcodecraft.paypact"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:531387933797:android:85c0bb47fb723bc787d28c",
-        "android_client_info": {
-          "package_name": "com.paypact.app"
-        }
-      },
-      "oauth_client": [
+          "client_id": "531387933797-jhd8vke4vq0g2n565f6agaaq999lb8oh.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kshitijcodecraft.paypact",
+            "certificate_hash": "9f5df5a4e8db27b73cf0d58b237abd55de559ddc"
+          }
+        },
         {
           "client_id": "531387933797-gi2neo7h2rtasuk16d2r1rq2m8g8ad85.apps.googleusercontent.com",
           "client_type": 3
